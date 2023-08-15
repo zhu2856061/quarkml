@@ -1,0 +1,2 @@
+recursive-include quarkml *.pyd
+recursive-include quarkml *.so
