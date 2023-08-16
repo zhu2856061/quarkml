@@ -5,4 +5,5 @@ from __future__ import absolute_import, division, print_function
 
 from quarkml.feature_engineering import FeatureEngineering
 from quarkml.model_engineering import ModelEngineering
+from quarkml.distributed_engineering import DistributedEngineering
 from quarkml.utils import *

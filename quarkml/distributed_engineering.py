@@ -11,7 +11,6 @@ from typing import List
 import pandas as pd
 
 
-# 特征工程
 class DistributedEngineering(object):
 
     def __init__(self) -> None:
@@ -159,12 +158,12 @@ class DistributedEngineering(object):
         params=None,
         seed=2023,
         num_workers=2,
-        trainer_resources={"CPU": 4},
-        resources_per_worker={"CPU": 2},
+        trainer_resources=None,
+        resources_per_worker=None,
         use_gpu=False,
         report_dir = './encode/dist_model',
     ):
-        tmodel = self.TM.lgb_distributed_train(
+        tmodel = self.TM.lgb_distributed_model(
                 trn_ds,
                 label_name,
                 val_ds,

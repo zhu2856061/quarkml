@@ -168,19 +168,31 @@ class TreeModel(object):
 
         return 0, 0
 
-    def lgb_distributed_train(
+    def lgb_distributed_model(
         self,
         trn_ds,
         label_name,
         val_ds=None,
-        categorical_features = None,
+        categorical_features=None,
         params=None,
         seed=2023,
+        num_workers=2,
+        trainer_resources=None,
+        resources_per_worker=None,
+        use_gpu=False,
+        report_dir='./encode/dist_model',
     ):
 
-        return lgb_distributed_train(trn_ds,
-                                     label_name,
-                                     val_ds,
-                                     categorical_features,
-                                     params,
-                                     seed=seed)
+        return lgb_distributed_train(
+            trn_ds,
+            label_name,
+            val_ds,
+            categorical_features,
+            params,
+            seed,
+            num_workers,
+            trainer_resources,
+            resources_per_worker,
+            use_gpu,
+            report_dir,
+        )

@@ -29,8 +29,8 @@ def lgb_distributed_train(
     params=None,
     seed=2023,
     num_workers=2,
-    trainer_resources={"CPU": 4},
-    resources_per_worker={"CPU": 2},
+    trainer_resources=None,
+    resources_per_worker=None,
     use_gpu=False,
     report_dir = './encode/dist_model',
 ):
@@ -74,6 +74,7 @@ def lgb_distributed_train(
         params_set.update({'metric': 'auc'})
     else:
         params_set.update({'objective': 'multiclass'})
+        params_set.update({'num_class': len(_label_unique_num)})
         params_set.update({'metric': 'auc_mu'})
 
     if params is not None:
@@ -88,7 +89,23 @@ def lgb_distributed_train(
         preprocessor = Chain(
             Categorizer(categorical_features), 
         )
+    
+    ''' 【注意】
+    1 多机多gpu / 或者单机多gpu-> 
+    scaling_config = ScalingConfig(
+    num_workers=2, # 几个GPU就设置几
+    use_gpu=True,
+    )
 
+    2 多机多cpu ->
+    scaling_config = ScalingConfig(
+    num_workers=4,
+    trainer_resources={"CPU": 0},
+    resources_per_worker={"CPU": 8},
+    )
+
+    3 若是单机cpu 就没必要分布式了，并发lgb和xgb 都具备了
+    '''
     gbm = LightGBMTrainer(
         scaling_config=ScalingConfig(
             # Number of workers to use for data parallelism.
@@ -116,26 +133,28 @@ def lgb_distributed_train(
     result = gbm.fit()
 
     # 评估
-    y_true = val_ds.select_columns(cols=[label_name]).to_pandas()['class']
+    report_dict = None
+    if len(_label_unique_num) <= 2:
+        y_true = val_ds.select_columns(cols=[label_name]).to_pandas()[label_name]
 
-    test_dataset = val_ds.drop_columns(cols=[label_name])
-    y_scores = test_dataset.map_batches(
-        DistributedLGBPredict, 
-        fn_constructor_args=[result.checkpoint], 
-        compute=ActorPoolStrategy(), 
-        batch_format="pandas"
-    )
-    y_scores = y_scores.to_pandas()['predictions']
+        test_dataset = val_ds.drop_columns(cols=[label_name])
+        y_scores = test_dataset.map_batches(
+            DistributedLGBPredict, 
+            fn_constructor_args=[result.checkpoint], 
+            compute=ActorPoolStrategy(), 
+            batch_format="pandas"
+        )
+        y_scores = y_scores.to_pandas()['predictions']
 
-    if params_set['objective'] == 'regression':
-        auc_score = _auc(y_true, y_scores)
-        ks_score = _ks(y_true, y_scores)
-        logger.info(f"lgb_model: auc:{auc_score}, ks:{ks_score}")
+        if params_set['objective'] == 'regression':
+            auc_score = _auc(y_true, y_scores)
+            ks_score = _ks(y_true, y_scores)
+            logger.info(f"lgb_model: auc:{auc_score}, ks:{ks_score}")
 
-    report_dict = {
-        'auc_score': auc_score,
-        'ks_score': ks_score,
-    }
+        report_dict = {
+            'auc_score': auc_score,
+            'ks_score': ks_score,
+        }
     logger.info(
         f'************************************ end lgb total time: {time.time()-start} ************************************'
     )

@@ -4,7 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import absolute_import, division, print_function
 import sys
-sys.path.append("..")
+sys.path.append("../..")
 # ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
 import ray
 import pandas as pd
@@ -15,13 +15,13 @@ from quarkml.distributed_engineering import DistributedEngineering
 FE = FeatureEngineering()
 DE = DistributedEngineering()
 ME = ModelEngineering()
-runtime_envs = {"working_dir": ".."}
+runtime_envs = {"working_dir": "../.."}
 context = ray.init(runtime_env = runtime_envs)
 print(context.dashboard_url)
 
 # 读取数据
 # step1
-ds = pd.read_csv("../experiment/credit/credit.csv")
+ds = pd.read_csv("credit.csv")
 ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
 print("-1->", ds)
 tr_ds = ds[:800]

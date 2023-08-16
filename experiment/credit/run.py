@@ -5,7 +5,7 @@
 from __future__ import absolute_import, division, print_function
 import sys
 
-sys.path.append("..")
+sys.path.append("../..")
 
 import ray
 import pandas as pd
@@ -24,7 +24,7 @@ ME = ModelEngineering()
 # runtime_env 运行环境， working_dir 指定工作目录
 context = ray.init(
     address="auto",
-    runtime_env={"working_dir": ".."},
+    runtime_env={"working_dir": "../.."},
     ignore_reinit_error=True,
     include_dashboard=True,
     dashboard_host='127.0.0.1',
@@ -35,10 +35,10 @@ print(context.dashboard_url)
 
 ######### 数据处理 #########
 # step1 对数据进行处理
-ds = pd.read_csv("../experiment/credit/credit.csv")
+ds = pd.read_csv("credit.csv")
 ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
 # step1.1 基于新数据采用同样的处理方法
-ds = pd.read_csv("../experiment/credit/credit.csv")
+ds = pd.read_csv("credit.csv")
 ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
 #########
 
