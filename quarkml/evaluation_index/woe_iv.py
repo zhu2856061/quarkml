@@ -7,7 +7,7 @@ import os
 import numpy as np
 import pandas as pd
 import ray
-from multiprocessing import Pool
+from ray.util.multiprocessing import Pool
 
 import pickle
 from typing import List

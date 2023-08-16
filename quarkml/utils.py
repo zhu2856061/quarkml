@@ -371,3 +371,6 @@ def get_categorical_numerical_features(ds: pd.DataFrame):
             numerical_features.append(feature)
 
     return categorical_features, numerical_features
+
+def error_callback(error):
+    logger.info(f"Error info: {error}")

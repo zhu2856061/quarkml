@@ -9,13 +9,13 @@ import pickle
 import numpy as np
 import time
 import ray
-from multiprocessing import Pool
+from ray.util.multiprocessing import Pool
 from loguru import logger
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from quarkml.model.tree_model import lgb_train
 from typing import List
-from quarkml.utils import transform
+from quarkml.utils import transform, error_callback
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -110,7 +110,7 @@ class TModelSelector(object):
                     val_init_score,
                     importance_metric,
                     seed,
-                ))
+                ), error_callback=error_callback)
             else:
                 futures = lgb_train(
                     trn_x,

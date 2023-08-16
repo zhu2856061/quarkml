@@ -259,6 +259,18 @@ ds, categorical_features, numerical_features = FE.dist_data_processing("experime
 ME.dist_model(ds, 'class', categorical_features=categorical_features)
 ```
 
+---
+
+```
+1 安装 
+  pip3 install ray[default]
+  切记不可 pip3 install ray，因为这样安装不完整，会没有Dashboard
+2.启动
+  【启动 head 节点】ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
+  【启动其他节点】 ray start --address='head节点的ip:1063'
+
+这里只演示启动head 节点，并在head节点运行，因此 ray.init() 并没有设置
+```
 
 ## 完整流程案例-常规
 ``` python

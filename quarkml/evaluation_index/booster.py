@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 import ray
-from multiprocessing import Pool
+from ray.util.multiprocessing import Pool
 from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error, log_loss, roc_auc_score
 import scipy.special
@@ -18,7 +18,7 @@ import random
 import traceback
 from typing import List
 from quarkml.model.tree_model import lgb_train
-from quarkml.utils import Node, tree_to_formula, formula_to_tree, to_csv, get_categorical_numerical_features, transform
+from quarkml.utils import Node, tree_to_formula, formula_to_tree, to_csv, get_categorical_numerical_features, transform, error_callback
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -98,7 +98,6 @@ class BoosterSelector(object):
             distributed_and_multiprocess,
             job,
         )
-
         candidate_features_scores = sorted(results,
                                            key=lambda x: x[1],
                                            reverse=True)
@@ -214,6 +213,11 @@ class BoosterSelector(object):
         elif distributed_and_multiprocess == 2:
             pool = Pool(n_jobs)
 
+        train_y = self.y.iloc[train_idx]
+        val_y = self.y.iloc[val_idx]
+        train_init = self.init_scores.loc[train_idx]
+        val_init = self.init_scores.loc[val_idx]
+        
         futures_list = []
         for i in range(n):
             if i == (n - 1):
@@ -225,12 +229,14 @@ class BoosterSelector(object):
                         train_idx,
                         val_idx,
                         params,
-                        self.tmp_save_path,
-                        self.y,
-                        self.init_scores,
+                        train_y,
+                        val_y,
+                        train_init,
+                        val_init,
                         i,
                     )
                 elif distributed_and_multiprocess == 2:
+                    
                     futures = pool.apply_async(
                         _calculate_and_evaluate_multiprocess, (
                             self.select_method,
@@ -240,10 +246,12 @@ class BoosterSelector(object):
                             val_idx,
                             params,
                             self.tmp_save_path,
-                            self.y,
-                            self.init_scores,
+                            train_y,
+                            val_y,
+                            train_init,
+                            val_init,
                             i,
-                        ))
+                        ), error_callback=error_callback)
                 else:
                     futures = _calculate_and_evaluate_multiprocess(
                         self.select_method,
@@ -253,53 +261,60 @@ class BoosterSelector(object):
                         val_idx,
                         params,
                         self.tmp_save_path,
-                        self.y,
-                        self.init_scores,
+                        train_y,
+                        val_y,
+                        train_init,
+                        val_init,
                         i,
                     )
                 futures_list.append(futures)
-            else:
-                if distributed_and_multiprocess == 1:
-                    futures = _calculate_and_evaluate_multiprocess_remote.remote(
-                        self.select_method,
-                        self.metric,
-                        candidate_features[i * length:(i + 1) * length],
-                        train_idx,
-                        val_idx,
-                        params,
-                        self.tmp_save_path,
-                        self.y,
-                        self.init_scores,
-                        i,
-                    )
-                elif distributed_and_multiprocess == 2:
-                    futures = pool.apply_async(
-                        _calculate_and_evaluate_multiprocess, (
-                            self.select_method,
-                            self.metric,
-                            candidate_features[i * length:(i + 1) * length],
-                            train_idx,
-                            val_idx,
-                            params,
-                            self.tmp_save_path,
-                            self.y,
-                            self.init_scores,
-                            i,
-                        ))
-                else:
-                    futures = _calculate_and_evaluate_multiprocess(
-                        self.select_method,
-                        self.metric,
-                        candidate_features[i * length:(i + 1) * length],
-                        train_idx,
-                        val_idx,
-                        params,
-                        self.tmp_save_path,
-                        self.y,
-                        self.init_scores,
-                        i,
-                    )
-                futures_list.append(futures)
+            # else:
+            #     if distributed_and_multiprocess == 1:
+            #         futures = _calculate_and_evaluate_multiprocess_remote.remote(
+            #             self.select_method,
+            #             self.metric,
+            #             candidate_features[i * length:(i + 1) * length],
+            #             train_idx,
+            #             val_idx,
+            #             params,
+            #             train_y,
+            #             val_y,
+            #             train_init,
+            #             val_init,
+            #             i,
+            #         )
+            #     elif distributed_and_multiprocess == 2:
+            #         futures = pool.apply_async(
+            #             _calculate_and_evaluate_multiprocess, (
+            #                 self.select_method,
+            #                 self.metric,
+            #                 candidate_features[i * length:(i + 1) * length],
+            #                 train_idx,
+            #                 val_idx,
+            #                 params,
+            #                 self.tmp_save_path,
+            #                 train_y,
+            #                 val_y,
+            #                 train_init,
+            #                 val_init,
+            #                 i,
+            #             ), error_callback=error_callback)
+            #     else:
+            #         futures = _calculate_and_evaluate_multiprocess(
+            #             self.select_method,
+            #             self.metric,
+            #             candidate_features[i * length:(i + 1) * length],
+            #             train_idx,
+            #             val_idx,
+            #             params,
+            #             self.tmp_save_path,
+            #             train_y,
+            #             val_y,
+            #             train_init,
+            #             val_init,
+            #             i,
+            #         )
+            #     futures_list.append(futures)
 
         if distributed_and_multiprocess == 2:
             pool.close()
@@ -401,8 +416,12 @@ def _calculate_and_evaluate_multiprocess(
     val_idx,
     params,
     tmp_save_path,
-    y: pd.DataFrame,
-    init_scores: pd.DataFrame,
+    train_y,
+    val_y,
+    train_init,
+    val_init,
+    # y: pd.DataFrame,
+    # init_scores: pd.DataFrame,
     i,
 ):
     try:
@@ -418,16 +437,53 @@ def _calculate_and_evaluate_multiprocess(
         del data
         gc.collect()
 
-        train_y = y.iloc[train_idx]
-        val_y = y.iloc[val_idx]
-        train_init = init_scores.loc[train_idx]
-        val_init = init_scores.loc[val_idx]
+        # train_y = y.iloc[train_idx]
+        # val_y = y.iloc[val_idx]
+        # train_init = init_scores.loc[train_idx]
+        # val_init = init_scores.loc[val_idx]
         init_metric = _get_init_metric(metric, val_init, val_y)
-        for candidate_feature in candidate_features:
+        for candidate_feature in candidate_features[:1]:
             candidate_feature.calculate(data_temp, is_root=True)
-            score = _evaluate(select_method, metric, candidate_feature,
-                              train_y, val_y, params, train_init, val_init,
-                              init_metric)
+            
+            # score = _evaluate(select_method, metric, candidate_feature,
+            #                   train_y, val_y, params, train_init, val_init,
+            #                   init_metric)
+            
+
+            train_x = pd.DataFrame(candidate_feature.data.loc[train_y.index])
+            val_x = pd.DataFrame(candidate_feature.data.loc[val_y.index])
+            if select_method == 'predictive':
+                """基于之前的basic 【train_init， val_init】预测分 基础上进行继续训练，
+                    而继续训练只采样单特征进行，从而确保，在原来的基础上增益来自该特征
+                """
+                if params is None:
+                    params = {'period': 2000, 'n_estimators': 200, 'stopping_rounds': 20}  # 为了不打印
+                futures = lgb_train(
+                    train_x,
+                    train_y,
+                    val_x,
+                    val_y,
+                    params=params,
+                    trn_init_score=train_init,
+                    val_init_score=val_init,
+                )
+
+                key = list(futures[0].best_score_['valid_1'].keys())[0]
+                if metric in ['auc']:
+                    score = futures[0].best_score_['valid_1'][key] - init_metric
+                else:
+                    score = init_metric - futures[0].best_score_['valid_1'][key]
+
+            elif select_method == 'corr':
+                score = np.corrcoef(
+                    pd.concat([train_x, val_x], axis=0).fillna(0).values.ravel(),
+                    pd.concat([train_y, val_y],
+                                axis=0).fillna(0).values.ravel())[0, 1]
+                score = abs(score)
+            else:
+                raise NotImplementedError("Cannot recognize select_method %s." %
+                                            select_method)
+
             candidate_feature.delete()
             results.append([candidate_feature, score])
         logger.info(
@@ -479,11 +535,11 @@ def _evaluate(
             score = np.corrcoef(
                 pd.concat([train_x, val_x], axis=0).fillna(0).values.ravel(),
                 pd.concat([train_y, val_y],
-                          axis=0).fillna(0).values.ravel())[0, 1]
+                            axis=0).fillna(0).values.ravel())[0, 1]
             score = abs(score)
         else:
             raise NotImplementedError("Cannot recognize select_method %s." %
-                                      select_method)
+                                        select_method)
         return score
     except:
         print(traceback.format_exc())
@@ -507,3 +563,5 @@ def _get_init_metric(metric, pred, label):
             f"Please select metric from ['binary_logloss', 'multi_logloss'"
             f"'rmse', 'auc'].")
     return init_metric
+
+

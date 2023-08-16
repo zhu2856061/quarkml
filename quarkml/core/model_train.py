@@ -8,7 +8,7 @@ import os
 import numpy as np
 import time
 import ray
-from multiprocessing import Pool
+from ray.util.multiprocessing import Pool
 from loguru import logger
 from quarkml.model.tree_model import lgb_train, _auc, _ks
 from quarkml.model.distributed_tree_model import lgb_distributed_train

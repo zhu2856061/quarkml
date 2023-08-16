@@ -8,7 +8,7 @@ import os
 import pickle
 import numpy as np
 import ray
-from multiprocessing import Pool
+from ray.util.multiprocessing import Pool
 import pandas as pd
 
 from quarkml.utils import transform, get_categorical_numerical_features
