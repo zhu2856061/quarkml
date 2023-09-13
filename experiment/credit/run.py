@@ -2,6 +2,7 @@
 # @Time   : 2023/5/29 15:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 import sys
 
@@ -12,8 +13,6 @@ import pandas as pd
 from quarkml.feature_engineering import FeatureEngineering
 from quarkml.model_engineering import ModelEngineering
 
-FE = FeatureEngineering()
-ME = ModelEngineering()
 
 ######### 启动ray 构建一个单机环境 , 单机自己测试就启动这个后再运行程序，若分布式多机，则分布式环境已经有了，无需启动
 # ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
@@ -33,13 +32,15 @@ context = ray.init(
 print(context.dashboard_url)
 #########
 
+FE = FeatureEngineering()
+ME = ModelEngineering()
 ######### 数据处理 #########
 # step1 对数据进行处理
 ds = pd.read_csv("credit.csv")
 ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
 # step1.1 基于新数据采用同样的处理方法
 ds = pd.read_csv("credit.csv")
-ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
+ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False, task="tran")
 #########
 
 ######### 特征衍生 #########

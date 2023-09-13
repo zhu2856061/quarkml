@@ -2,6 +2,7 @@
 # @Time   : 2023/5/29 15:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 
 import numpy as np
@@ -12,7 +13,6 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from ray.train.lightgbm import LightGBMTrainer, LightGBMPredictor
 from ray.data.preprocessors.chain import Chain
 from ray.data.preprocessors.encoder import Categorizer
-from ray.data.preprocessors import StandardScaler
 from ray.data import ActorPoolStrategy
 from ray.air.config import ScalingConfig, RunConfig, CheckpointConfig
 from typing import List

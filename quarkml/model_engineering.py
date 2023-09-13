@@ -2,11 +2,13 @@
 # @Time   : 2023/5/29 15:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 
 from quarkml.core.data_processing import DataProcessing
 from quarkml.core.model_train import TreeModel
 from quarkml.core.model_hparams import HparamModel
+from quarkml.core.predict_tools import Predict
 from loguru import logger
 from quarkml.core.model_interpretable import ModelInterpretable
 from quarkml.utils import get_categorical_numerical_features
@@ -24,6 +26,7 @@ class ModelEngineering(object):
         self.TM = TreeModel()
         self.FI = ModelInterpretable()
         self.HM = HparamModel()
+        self.PRED = Predict()
 
     def model_cv(
         self,
@@ -82,13 +85,9 @@ class ModelEngineering(object):
         val_y: pd.DataFrame = None,
         params=None,
         spaces=None,
-        method='hyperopt',
         report_dir="encode"):
 
-        if method == 'hyperopt':
-            best_params = self.HM.hyperopt_fit(trn_x, trn_y, val_x, val_y, params, spaces)
-        elif method == 'optuna':
-            best_params = self.HM.optuna_fit(trn_x, trn_y, val_x, val_y, params)
+        best_params = self.HM.hyperopt_fit(trn_x, trn_y, val_x, val_y, params, spaces)
 
         os.makedirs(report_dir, exist_ok=True)
         with open(os.path.join(report_dir, "hparams.pkl"), "wb") as f:
@@ -132,3 +131,13 @@ class ModelEngineering(object):
                 use_gpu,
                 report_dir,
         )
+
+    def predict_2_so(self, model_path):
+        # 目前只能是lightgbm
+        self.PRED.compile_model(model_path)
+
+    def predict_load_so(self, model_so_path):
+        self.PRED.load_model_so(model_so_path)
+
+    def predict_x(self, x):
+        self.PRED.predict_x(x)

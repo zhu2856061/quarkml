@@ -2,6 +2,7 @@
 # @Time   : 2023/5/29 15:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 import pandas_profiling
 import pandas as pd
@@ -76,7 +77,7 @@ def get_feature_type(ds: pd.DataFrame):
     category_fea = list(ds.select_dtypes(exclude=np.number))
     numerical_fea = list(filter(lambda x: x not in category_fea, list(ds.columns)))
 
-    return category_fea, numerical_fea,
+    return category_fea, numerical_fea
 
 
 # 划分数值型变量中的连续变量和离散型变量, 判定数值多于100，认为是连续值，小于100认为是离散值

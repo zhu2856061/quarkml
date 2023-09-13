@@ -2,6 +2,7 @@
 # @Time   : 2023/5/29 15:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 
 import numpy as np
@@ -23,8 +24,8 @@ warnings.filterwarnings(action='ignore', category=UserWarning)
 def lgb_train(
     trn_x: pd.DataFrame,
     trn_y: pd.DataFrame,
-    val_x: pd.DataFrame=None,
-    val_y: pd.DataFrame=None,
+    val_x: pd.DataFrame = None,
+    val_y: pd.DataFrame = None,
     categorical_features: List = None,
     params=None,
     trn_init_score: pd.DataFrame = None,
@@ -64,7 +65,7 @@ def lgb_train(
         trn_x, val_x, trn_y, val_y, trn_init_score, val_init_score = train_test_split(
             trn_x,
             trn_y,
-            trn_init_score, 
+            trn_init_score,
             test_size=0.3,
             random_state=seed,
         )
@@ -105,9 +106,12 @@ def lgb_train(
     if params is not None:
         params_set.update(params)
 
-    logger.info(f"************************************ model parameters : {params_set} ************************************")
+    logger.info(
+        f"************************************ model parameters : {params_set} ************************************"
+    )
 
-    if "class" in params_set['objective'] or "binary" == params_set['objective']:
+    if "class" in params_set['objective'] or "binary" == params_set[
+            'objective']:
         gbm = lgb.LGBMClassifier(**params_set)
     else:
         gbm = lgb.LGBMRegressor(**params_set)
@@ -181,6 +185,7 @@ def lgb_train(
 def lgb_save(model, report_dir):
     joblib.dump(model, report_dir + '/loan_model.pkl')
 
+
 def _auc(y_true, y_scores):
     y_true = np.array(y_true)
     y_scores = np.array(y_scores)
@@ -192,6 +197,7 @@ def _ks(y_true, y_scores):
     y_scores = np.array(y_scores)
     FPR, TPR, thresholds = roc_curve(y_true, y_scores)
     return abs(FPR - TPR).max()
+
 
 def _get_categorical_numerical_features(ds: pd.DataFrame):
     # 获取类别特征，除number类型外的都是类别特征

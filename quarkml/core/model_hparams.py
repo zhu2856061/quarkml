@@ -2,6 +2,7 @@
 # @Time   : 2023/8/8 15:26
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+# type: ignore
 from __future__ import absolute_import, division, print_function
 
 import numpy as np

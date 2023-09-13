@@ -2,7 +2,7 @@
 # @Time   : 2023/7/27 09:47
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-
+# type: ignore
 import os
 import gc
 import sys
