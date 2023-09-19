@@ -354,11 +354,15 @@ def from_csv(file_dir):
     return None
 
 def to_csv(features_scores, file_dir):
-        stage1_dic = {}
+        stage1_dic = {
+            'stage1': [],
+            'score': [],
+        }
         for fea, sc in features_scores:
-            stage1_dic[tree_to_formula(fea)] = sc
-        stage1 = pd.DataFrame(list(stage1_dic.items()),
-                              columns=['stage1', 'score'])
+            stage1_dic['stage1'].append(tree_to_formula(fea))
+            stage1_dic['score'].append(sc)
+
+        stage1 = pd.DataFrame(stage1_dic)
         stage1.to_csv(file_dir + "/booster.csv", index=False)
 
 def get_categorical_numerical_features(ds: pd.DataFrame):

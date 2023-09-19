@@ -5,12 +5,18 @@
 # type: ignore
 from __future__ import absolute_import, division, print_function
 
+import os
+from typing import List
+import pandas as pd
+import pickle
+from loguru import logger
+import time
+
 from quarkml.core.data_processing import DataProcessing
 from quarkml.core.distributed_data_processing import DistDataProcessing
 from quarkml.core.feature_generation import FeatureGeneration
 from quarkml.core.feature_selector import FeatureSelector
-from typing import List
-import pandas as pd
+
 
 # 特征工程
 class FeatureEngineering(object):
@@ -21,42 +27,65 @@ class FeatureEngineering(object):
         self.FG = FeatureGeneration()
         self.FS = FeatureSelector()
 
-    def data_processing(
+    def data_processing_fit(
         self,
         ds: pd.DataFrame,
-        label_name: str,
+        label: str,
         cat_feature: List = [],
         num_feature: List = [],
         ordinal_number=100,
-        report_dir="./encode",
-        is_fillna=True,
+        is_fillna=False,
         drop_outliers=False,
+        is_token=True,
         verbosity=False,
-        task='fit',
+        compress=False,
+        report_dir="./encode",
     ):
-        if task == 'fit':
-            return self.DP.fit(
-                ds,
-                label_name,
-                cat_feature,
-                num_feature,
-                ordinal_number,
-                report_dir,
-                is_fillna,
-                drop_outliers,
-                verbosity,
-            )
-        else:
-            return self.DP.tranform(
-                ds,
-                label_name,
-                report_dir,
-                verbosity,
-            )
+        start = time.time()
+        X, cat_features, num_features = self.DP.fit(
+            ds,
+            label,
+            cat_feature,
+            num_feature,
+            ordinal_number,
+            is_fillna,
+            drop_outliers,
+            is_token,
+            verbosity,
+            compress,
+            report_dir,
+        )
+
+        logger.info(
+            f'*************** [data_processing_fit] cost time: {time.time()-start} ***************'
+        )
+        return X, cat_features, num_features
+
+    def data_processing_transform(
+        self,
+        ds: pd.DataFrame,
+        label: str,
+        verbosity=False,
+        compress=False,
+        report_dir="./encode",
+    ):
+        start = time.time()
+        X, cat_features, num_features = self.DP.tranform(
+            ds,
+            label,
+            verbosity,
+            compress,
+            report_dir,
+        )
+
+        logger.info(
+            f'*************** [data_processing_transform] cost time: {time.time()-start} ***************'
+        )
+        return X, cat_features, num_features
 
     def dist_data_processing(
         self,
-        files = None,
+        files=None,
         label_name: str = None,
         delimiter: str = ',',
         cat_feature: List = [],
@@ -81,19 +110,38 @@ class FeatureEngineering(object):
 
     def feature_generation(
         self,
-        X: pd.DataFrame,
-        categorical_features: List = None,
-        numerical_features: List = None,
-        report_dir: str = 'encode',
-        method: str = "basic",
+        file_path: str,
+        label: str,
+        params=None,
+        select_method='predictive',
+        min_candidate_features=200,
+        blocks=5,
+        ratio=0.5,
+        distributed_and_multiprocess=-1,
+        report_dir="encode",
     ):
-        if method == "basic":
-            return self.FG.basic_operator(
-                X,
-                categorical_features,
-                numerical_features,
-                report_dir,
-            )
+        """ 特征衍生
+            入参: file_path: 原始数据文件路径， 文件中的label
+            出参: 新的数据文件路径- 与原始数据文件一个文件夹内
+        """
+
+        ds = pd.read_csv(file_path)
+        # 产生新数据集
+        new_ds = self.FG.fit(
+            ds,
+            label,
+            params,
+            select_method,
+            min_candidate_features,
+            blocks,
+            ratio,
+            distributed_and_multiprocess,
+            report_dir,
+        )
+        # 写入原始路径
+        new_file = file_path + "_feature_generation.csv"
+        new_ds.to_csv(new_file, index=False)
+        return new_file
 
     def feature_selector(
         self,

@@ -11,7 +11,7 @@ from ray.util.multiprocessing import Pool
 
 import pickle
 from typing import List
-from quarkml.utils import transform, get_categorical_numerical_features
+from quarkml.utils import get_categorical_numerical_features, error_callback
 
 import warnings
 
@@ -34,9 +34,6 @@ class WOEIV(object):
         self,
         X: pd.DataFrame,
         y: pd.DataFrame,
-        candidate_features: List = None,
-        categorical_features: List = None,
-        numerical_features: List = None,
         part_column: str = None,  # 区间列：时间分块
         part_values: List = None,
         handle_zero="merge",
@@ -45,7 +42,6 @@ class WOEIV(object):
         use_base=True,
         report_dir="encode",
         distributed_and_multiprocess=-1,
-        job=-1,
     ):
         """ handle_zero: 针对 zero 进行合并
             bins: 分桶数，等频分桶
@@ -55,17 +51,10 @@ class WOEIV(object):
             report_dir: 会保存woe 和iv 的中间值，pd.DataFrame
         """
 
-        if categorical_features is None:
-            categorical_features, numerical_features = get_categorical_numerical_features(
-                X)
+        categorical_features, numerical_features = get_categorical_numerical_features(
+            X)
 
-        if candidate_features is not None:
-            X, _ = transform(X, candidate_features)
-            categorical_features, numerical_features = get_categorical_numerical_features(
-                X)
-
-        if job < 0:
-            job = os.cpu_count()
+        job = os.cpu_count() - 2
 
         assert handle_zero in ["merge", "minimum"
                                ], "Zero handler should be merge or minimum"
@@ -84,8 +73,10 @@ class WOEIV(object):
             }
 
             if distributed_and_multiprocess == 1:
-                _binning_numerical_remote = ray.remote(_binning_numerical_section)
-                _binning_categorical_remote = ray.remote(_binning_categorical_section)
+                _binning_numerical_remote = ray.remote(
+                    _binning_numerical_section)
+                _binning_categorical_remote = ray.remote(
+                    _binning_categorical_section)
             elif distributed_and_multiprocess == 2:
                 pool = Pool(job)
 
@@ -112,7 +103,8 @@ class WOEIV(object):
                         bins,
                         minimum,
                         part_column,
-                    ))
+                    ),
+                                               error_callback=error_callback)
                 else:
                     futures = _binning_numerical_section(
                         X[col],
@@ -140,7 +132,8 @@ class WOEIV(object):
                         y,
                         segments,
                         part_column,
-                    ))
+                    ),
+                                               error_callback=error_callback)
                 else:
                     futures = _binning_categorical_section(
                         X[col],
@@ -190,7 +183,8 @@ class WOEIV(object):
                         handle_zero,
                         bins,
                         minimum,
-                    ))
+                    ),
+                                               error_callback=error_callback)
                 else:
                     futures = _binning_numerical(
                         X[col],
@@ -212,7 +206,8 @@ class WOEIV(object):
                     futures = pool.apply_async(_binning_categorical, (
                         X[col],
                         y,
-                    ))
+                    ),
+                                               error_callback=error_callback)
                 else:
                     futures = _binning_categorical(
                         X[col],
@@ -235,29 +230,12 @@ class WOEIV(object):
                 woe[col] = items[0]
                 iv[col] = items[0]["iv"].iloc[0] if items[0] is not None else 0
 
-        os.makedirs(report_dir, exist_ok=True)
-        with open(os.path.join(report_dir, "woe_iv.pkl"), "wb") as f:
-            pickle.dump({"woe": woe, "iv": iv}, f)
-
-        if part_column: # 区间的话，就需要每个区间内的值都是大于要求的，即保留每个区间的最小值
+        if part_column:  # 区间的话，就需要每个区间内的值都是大于要求的，即保留每个区间的最小值
             for col, section_v in iv.items():
                 iv[col] = min(list(section_v.values()))
 
-        if candidate_features is not None:
-            selected_fea = []
-            selected_index = []
-            for k, v in iv.items():
-                if "booster_f_" in k and v > 0.02:
-                    indx = int(k.replace("booster_f_", ""))
-                    selected_fea.append(candidate_features[indx])
-                elif "booster_f_" in k and v <= 0.02:
-                    continue
-                selected_index.append(k)
-
-            return selected_fea, X[selected_index]
-
         selected_fea = [k for k, v in iv.items() if v > 0.02]
-        return selected_fea, X[selected_fea]
+        return selected_fea, X[selected_fea], woe, iv
 
 
 def _binning_numerical_section(
@@ -285,7 +263,7 @@ def _binning_numerical_section(
         tmp_woe = tmp_woe.append(tmp_res)
         tmp_iv[
             f"iv_{seg}"] = tmp_res["iv"].iloc[0] if tmp_res is not None else 0
-    
+
     return tmp_woe, tmp_iv
 
 
@@ -306,7 +284,7 @@ def _binning_categorical_section(
         tmp_woe = tmp_woe.append(tmp_res, ignore_index=True)
         tmp_iv[
             f"iv_{seg}"] = tmp_res["iv"].iloc[0] if tmp_res is not None else 0
-    
+
     return tmp_woe, tmp_iv
 
 

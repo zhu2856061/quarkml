@@ -9,8 +9,14 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 from copy import deepcopy
-from quarkml.utils import Node, FNode, tree_to_formula
 from typing import List
+from quarkml.utils import (
+    Node,
+    FNode,
+    tree_to_formula,
+    get_categorical_numerical_features,
+)
+
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -44,13 +50,10 @@ class BasicGeneration(object):
     def fit(
         self,
         X: pd.DataFrame,
-        categorical_features: List = None,
-        numerical_features: List = None,
-        report_dir: str = 'encode',
     ):
-        if categorical_features is None:
-            categorical_features, numerical_features = self._get_categorical_numerical_features(
-                X)
+
+        categorical_features, numerical_features = get_categorical_numerical_features(
+            X)
 
         logger.info(
             f"===== 【categorical_features】: {categorical_features} =====")
@@ -60,10 +63,11 @@ class BasicGeneration(object):
             categorical_features,
             numerical_features,
         )
-        candidate_features_list = [tree_to_formula(_) for _ in candidate_features_list]
-        with open(report_dir + '/generation', 'w') as f:
-            for fea in candidate_features_list:
-                f.write(fea + '\n')
+        candidate_features_list = [
+            tree_to_formula(_) for _ in candidate_features_list
+        ]
+        candidate_features_list.sort()
+
         return candidate_features_list
 
     def _get_candidate_features(
@@ -168,7 +172,6 @@ class BasicGeneration(object):
             return False
         else:
             return True
-
 
     def _get_categorical_numerical_features(self, ds: pd.DataFrame):
         # 获取类别特征，除number类型外的都是类别特征

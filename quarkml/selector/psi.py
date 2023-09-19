@@ -5,14 +5,12 @@
 # type: ignore
 from functools import reduce
 import os
-import pickle
 import numpy as np
 import ray
 from ray.util.multiprocessing import Pool
 import pandas as pd
-
-from quarkml.utils import transform, get_categorical_numerical_features
 from typing import List, Dict, Set
+from quarkml.utils import get_categorical_numerical_features, error_callback
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -36,38 +34,25 @@ class PSI(object):
     def fit(
         self,
         X: pd.DataFrame,
-        part_column: str = None,
-        candidate_features: List = None,
-        categorical_features: List = None,
-        numerical_features: List = None,
+        part_column: str,
         part_values: List = None,
         bins: int = 10,
         minimal: int = 1,
         priori: Dict = None,
-        report_dir="encode",
         distributed_and_multiprocess=-1,
-        job=-1,
     ):
         """ X : 样本
             part_column : 数据X的区间 (时间)切分维度part_columns , 数据分块后，统计块的两两比较
-            categorical_features : 类别特征list
-            numerical_features : 数值特征list
             part_values : 与 part_column 同时使用，若part_values 设置，则表明按part_values进行划分数据集，若不设置则会用part_column的每个值
             bins : 数值特征的分桶数
             minimal : 最小替换值
             priori: 初始每个特征的psi， 若有则会采用这个初始的，若没有则采用part_column的值[0]
         """
-        if categorical_features is None:
-            categorical_features, numerical_features = get_categorical_numerical_features(
+
+        categorical_features, numerical_features = get_categorical_numerical_features(
                 X)
 
-        if candidate_features is not None:
-            X, _ = transform(X, candidate_features)
-            categorical_features, numerical_features = get_categorical_numerical_features(
-                X)
-
-        if job < 0:
-            job = os.cpu_count()
+        job = os.cpu_count() - 2
 
         psi = pd.DataFrame()
         psi_detail = {}
@@ -105,7 +90,7 @@ class PSI(object):
                         minimal,
                         priori,
                         bins,
-                    ))
+                    ), error_callback=error_callback)
             else:
                 futures = _distribution_numerical_section(
                         X,
@@ -139,7 +124,7 @@ class PSI(object):
                         minimal,
                         priori,
                         bins,
-                    ))
+                    ), error_callback=error_callback)
             else:
                 futures = _distribution_categorical_section(
                         X,
@@ -155,7 +140,7 @@ class PSI(object):
         if distributed_and_multiprocess == 2:
             pool.close()
             pool.join()
-        
+
         if distributed_and_multiprocess == 1:
             futures_list = [_ for _ in ray.get(futures_list)]
         elif distributed_and_multiprocess == 2:
@@ -163,6 +148,7 @@ class PSI(object):
 
         for col, items in zip(numerical_features + categorical_features,
                                 futures_list):
+
             base[col] = items[1]
             psi_detail[col] = items[0]
             tmp_psi_summary = {"var": col}
@@ -173,36 +159,6 @@ class PSI(object):
             psi = psi[["base"] + all_parts]
         psi.columns = ["psi_" + str(col) for col in psi.columns]
 
-        os.makedirs(report_dir, exist_ok=True)
-        with open(os.path.join(report_dir, "psi.pkl"), "wb") as f:
-            pickle.dump({
-                "psi": psi,
-                "psi_detail": psi_detail,
-                "base": base,
-            }, f)
-
-        if candidate_features is not None:
-            selected_fea = []
-            selected_index = []
-            keys = list(psi["psi_var"])
-            values = [list(psi[_]) for _ in psi.columns if _ != "psi_var"]
-
-            for i, k in enumerate(keys):
-                if "booster_f_" in k:
-                    is_saved = True
-                    for v in values:
-                        if v[i] >= 0.25:
-                            is_saved = False
-                            break
-                    if is_saved:
-                        indx = int(k.replace("booster_f_", ""))
-                        selected_fea.append(candidate_features[indx])
-                        selected_index.append(k)
-                else:
-                    selected_index.append(k)
-
-            return selected_fea, X[selected_index]
-
         col_name = psi.columns
         for col in col_name:
             if col == "psi_var":
@@ -210,7 +166,7 @@ class PSI(object):
             psi = psi[psi[col] < 0.25]
 
         selected_fea = list(psi['psi_var'])
-        return selected_fea, X[selected_fea]
+        return selected_fea, X[selected_fea], base, psi_detail, psi
 
 
 def _distribution_categorical_section(X: pd.DataFrame,
