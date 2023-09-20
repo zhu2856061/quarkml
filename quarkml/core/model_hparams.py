@@ -9,7 +9,6 @@ import numpy as np
 from loguru import logger
 from quarkml.model.tree_model import lgb_train
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import StratifiedKFold
 from hyperopt import fmin, hp, Trials, space_eval, tpe
 import optuna
 from sklearn.metrics import roc_auc_score, f1_score
@@ -33,12 +32,13 @@ class HparamModel(object):
         y_scores = np.array(y_scores)
         return f1_score(y_true, y_scores)
 
-    def hyperopt_fit(
+    def fit(
         self,
         trn_x,
         trn_y,
         val_x=None,
         val_y=None,
+        cat_feature=None,
         params=None,
         spaces=None,
     ):
@@ -55,6 +55,7 @@ class HparamModel(object):
         self.val_x = val_x
         self.trn_y = trn_y
         self.val_y = val_y
+        self.cat_feature = cat_feature
 
         if spaces is None:
             spaces = {
@@ -107,14 +108,16 @@ class HparamModel(object):
         return study.best_params
 
     def _hyperopt_target_fn(self, config):
-        #
+
         futures = lgb_train(
-            self.trn_x,
-            self.trn_y,
-            self.val_x,
-            self.val_y,
+            trn_x=self.trn_x,
+            trn_y=self.trn_y,
+            val_x=self.val_x,
+            val_y=self.val_y,
+            cat_features=self.cat_feature,
             params=config,
         )
+
         val_pred = futures[0].predict(
             self.val_x,
             num_iteration=futures[0]._best_iteration,

@@ -8,7 +8,6 @@ from __future__ import absolute_import, division, print_function
 import os
 from typing import List
 import pandas as pd
-import pickle
 from loguru import logger
 import time
 
@@ -42,6 +41,11 @@ class FeatureEngineering(object):
         report_dir="./encode",
     ):
         start = time.time()
+        file_path = None
+        if isinstance(ds, str):
+            file_path = ds
+            ds = pd.read_csv(ds)
+
         X, cat_features, num_features = self.DP.fit(
             ds,
             label,
@@ -55,10 +59,16 @@ class FeatureEngineering(object):
             compress,
             report_dir,
         )
-
         logger.info(
             f'*************** [data_processing_fit] cost time: {time.time()-start} ***************'
         )
+
+        # 写入原始路径
+        if file_path:
+            new_file = file_path + "_data_processing.csv"
+            X.to_csv(new_file, index=False)
+            return new_file
+
         return X, cat_features, num_features
 
     def data_processing_transform(
@@ -70,6 +80,11 @@ class FeatureEngineering(object):
         report_dir="./encode",
     ):
         start = time.time()
+        file_path = None
+        if isinstance(ds, str):
+            file_path = ds
+            ds = pd.read_csv(ds)
+
         X, cat_features, num_features = self.DP.tranform(
             ds,
             label,
@@ -81,6 +96,13 @@ class FeatureEngineering(object):
         logger.info(
             f'*************** [data_processing_transform] cost time: {time.time()-start} ***************'
         )
+
+        # 写入原始路径
+        if file_path:
+            new_file = file_path + "_data_processing.csv"
+            X.to_csv(new_file, index=False)
+            return new_file
+
         return X, cat_features, num_features
 
     def dist_data_processing(
@@ -110,8 +132,10 @@ class FeatureEngineering(object):
 
     def feature_generation(
         self,
-        file_path: str,
+        ds: pd.DataFrame,
         label: str,
+        cat_features: List = None,
+        is_filter=True,
         params=None,
         select_method='predictive',
         min_candidate_features=200,
@@ -121,15 +145,21 @@ class FeatureEngineering(object):
         report_dir="encode",
     ):
         """ 特征衍生
-            入参: file_path: 原始数据文件路径， 文件中的label
+            入参: ds: 原始数据文件路径 或 pd.DataFrame， 文件中的label
             出参: 新的数据文件路径- 与原始数据文件一个文件夹内
         """
+        start = time.time()
+        file_path = None
+        if isinstance(ds, str):
+            file_path = ds
+            ds = pd.read_csv(ds)
 
-        ds = pd.read_csv(file_path)
         # 产生新数据集
         new_ds = self.FG.fit(
             ds,
             label,
+            cat_features,
+            is_filter,
             params,
             select_method,
             min_candidate_features,
@@ -138,114 +168,83 @@ class FeatureEngineering(object):
             distributed_and_multiprocess,
             report_dir,
         )
+
+        logger.info(
+            f'*************** [feature_generation] cost time: {time.time()-start} ***************'
+        )
+
         # 写入原始路径
-        new_file = file_path + "_feature_generation.csv"
-        new_ds.to_csv(new_file, index=False)
-        return new_file
+        if file_path:
+            new_file = file_path + "_feature_generation.csv"
+            new_ds.to_csv(new_file, index=False)
+            return new_file
+        else:
+            return new_ds
 
     def feature_selector(
         self,
-        X: pd.DataFrame,
-        y: pd.DataFrame,
-        candidate_features: List[str] = None,
-        categorical_features: List[str] = None,
-        numerical_features: List[str] = None,
-        params: dict = None,
-        tmodel_method='mean',
-        init_score: pd.DataFrame = None,
-        importance_metric: str = 'importance',
-        select_method='predictive',
-        min_candidate_features=200,
-        blocks=2,
-        ratio=0.5,
-        folds=5,
-        seed=2023,
+        ds: pd.DataFrame,
+        label: str,
         part_column: str = None,
+        cate_features: List[str] = None,
         part_values: List = None,
-        handle_zero="merge",
         bins=10,
-        minimum=0.5,
-        minimal: int = 1,
-        priori=None,
-        use_base=True,
-        report_dir="encode",
-        method: str = "booster",
+        importance_metric: str = "importance",
+        method: str = "fwiz",
         distributed_and_multiprocess=-1,
-        job=-1,
+        report_dir="encode",
     ):
-        if method == "booster":
-            selected_feature, new_X = self.FS.booster_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                params,
-                select_method,
-                min_candidate_features,
-                blocks,
-                ratio,
-                seed,
-                report_dir,
-                distributed_and_multiprocess,
-                job,
-            )
+        start = time.time()
+        file_path = None
+        if isinstance(ds, str):
+            file_path = ds
+            ds = pd.read_csv(ds)
 
         if method == "fwiz":
-            selected_feature, new_X = self.FS.fwiz_selector(
-                X,
-                y,
-                candidate_features,
-            )
+           ds = self.FS.fwiz_selector(ds, label)
 
         if method == "iv":
-            selected_feature, new_X = self.FS.iv_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                numerical_features,
+            ds = self.FS.iv_selector(
+                ds,
+                label,
                 part_column,
+                cate_features,
                 part_values,
-                handle_zero,
                 bins,
-                minimum,
-                use_base,
-                report_dir,
                 distributed_and_multiprocess,
-                job,
+                report_dir,
             )
 
         if method == "psi":
-            selected_feature, new_X = self.FS.psi_selector(
-                X,
+            ds = self.FS.psi_selector(
+                ds,
+                label,
                 part_column,
-                candidate_features,
-                categorical_features,
-                numerical_features,
+                cate_features,
                 part_values,
                 bins,
-                minimal,
-                priori,
-                report_dir,
                 distributed_and_multiprocess,
-                job,
+                report_dir,
             )
 
         if method == "tmodel":
-            selected_feature, new_X = self.FS.tmodel_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                init_score,
-                tmodel_method,
-                params,
+            ds = self.FS.tmodel_selector(
+                ds,
+                label,
+                cate_features,
                 importance_metric,
-                folds,
-                seed,
-                report_dir,
                 distributed_and_multiprocess,
-                job,
+                report_dir,
             )
 
-        return selected_feature, new_X
+        logger.info(
+            f'*************** [feature_selector] cost time: {time.time()-start} ***************'
+        )
+
+        # 写入原始路径
+        if file_path:
+            new_file = file_path + "_feature_selector.csv"
+            ds.to_csv(new_file, index=False)
+            return new_file
+
+        return ds

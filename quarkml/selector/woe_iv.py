@@ -11,7 +11,7 @@ from ray.util.multiprocessing import Pool
 
 import pickle
 from typing import List
-from quarkml.utils import get_categorical_numerical_features, error_callback
+from quarkml.utils import get_cat_num_features, error_callback
 
 import warnings
 
@@ -35,12 +35,12 @@ class WOEIV(object):
         X: pd.DataFrame,
         y: pd.DataFrame,
         part_column: str = None,  # 区间列：时间分块
+        cat_features: List = None,
         part_values: List = None,
         handle_zero="merge",
         bins=10,
         minimum=0.5,
         use_base=True,
-        report_dir="encode",
         distributed_and_multiprocess=-1,
     ):
         """ handle_zero: 针对 zero 进行合并
@@ -51,8 +51,7 @@ class WOEIV(object):
             report_dir: 会保存woe 和iv 的中间值，pd.DataFrame
         """
 
-        categorical_features, numerical_features = get_categorical_numerical_features(
-            X)
+        categorical_features, numerical_features = get_cat_num_features(X, cat_features)
 
         job = os.cpu_count() - 2
 

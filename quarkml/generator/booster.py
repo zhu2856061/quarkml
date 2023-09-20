@@ -22,7 +22,7 @@ from quarkml.utils import (
     Node,
     tree_to_formula,
     formula_to_tree,
-    get_categorical_numerical_features,
+    get_cat_num_features,
     transform,
     error_callback,
 )
@@ -41,6 +41,7 @@ class BoosterSelector(object):
         X: pd.DataFrame,
         y: pd.DataFrame,
         candidate_features: List[str],
+        cat_feature: List = None,
         params=None,
         select_method='predictive',
         min_candidate_features=200,
@@ -56,7 +57,7 @@ class BoosterSelector(object):
 
         job = os.cpu_count() - 2
 
-        categorical_features, _ = get_categorical_numerical_features(X)
+        categorical_features, _ = get_cat_num_features(X, cat_feature)
         for cate_fea in categorical_features:
             try:
                 X[cate_fea] = X[cate_fea].astype('category')
@@ -74,14 +75,14 @@ class BoosterSelector(object):
             self.metric = params.get('metric', 'binary_logloss')
 
         # 获得原始的初始 y_pred 分
-        self.init_scores = self._get_init_score(X, y, params, seed=seed)
+        self.init_scores = self._get_init_score(X, y, categorical_features, params, seed=self.seed)
 
         # 拿到样本下标， 按block 划分
         _, _, train_y, test_y = train_test_split(
             X,
             y,
             test_size=0.2,
-            random_state=seed,
+            random_state=self.seed,
         )
         train_index_samples = self._subsample(train_y.index, blocks)
         val_index_samples = self._subsample(test_y.index, blocks)
@@ -100,12 +101,9 @@ class BoosterSelector(object):
             distributed_and_multiprocess,
             job,
         )
-        candidate_features_scores = sorted(results,
-                                           key=lambda x: x[1],
-                                           reverse=True)
+        candidate_features_scores = sorted(results, key=lambda x: x[1], reverse=True)
         # 剔除掉两两差异不大的特征
-        candidate_features_scores = self._delete_same(
-            candidate_features_scores)
+        candidate_features_scores = self._delete_same(candidate_features_scores)
 
         while idx < len(train_index_samples):
             n_reserved_features = max(
@@ -170,9 +168,9 @@ class BoosterSelector(object):
         selected_fea = [tree_to_formula(fea) for fea in return_results]
         if len(selected_fea) > 0:
             ds, _ = transform(X, selected_fea)
-            return selected_fea, candidate_features_scores, ds
+            return selected_fea, ds
         else:
-            return selected_fea, candidate_features_scores, X
+            return selected_fea, X
 
     def _subsample(self, iterators, n_data_blocks):
         # 基于iterators 返回list block-> block大小是递增
@@ -312,6 +310,7 @@ class BoosterSelector(object):
         self,
         X: pd.DataFrame,
         y: pd.DataFrame,
+        cat_features: List=None,
         params=None,
         feature_boosting=True,
         seed=2023,
@@ -337,12 +336,12 @@ class BoosterSelector(object):
                 val_y = y.iloc[v_index]
 
                 futures = lgb_train(
-                    trn_x,
-                    trn_y,
-                    val_x,
-                    val_y,
-                    None,
-                    params,
+                    trn_x=trn_x,
+                    trn_y=trn_y,
+                    val_x=val_x,
+                    val_y=val_y,
+                    cat_features=cat_features,
+                    params=params,
                 )
 
                 init_scores[v_index] = futures[0].predict_proba(
@@ -475,8 +474,6 @@ def _evaluate(
             """基于之前的basic 【train_init， val_init】预测分 基础上进行继续训练，
                 而继续训练只采样单特征进行，从而确保，在原来的基础上增益来自该特征
             """
-            if params is None:
-                params = {'period': 2000}  # 为了不打印
             futures = lgb_train(
                 train_x,
                 train_y,

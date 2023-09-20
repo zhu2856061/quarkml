@@ -4,13 +4,14 @@
 # @Moto   : Knowledge comes from decomposition
 # type: ignore
 from __future__ import absolute_import, division, print_function
+import os
 import pandas as pd
 from loguru import logger
 from quarkml.generator.baisc_operation import BasicGeneration
 from quarkml.generator.booster import BoosterSelector
 from typing import List
 
-from quarkml.utils import tree_to_formula
+from quarkml.utils import tree_to_formula, transform
 
 import warnings
 
@@ -31,6 +32,8 @@ class FeatureGeneration(object):
         self,
         ds: pd.DataFrame,
         label: str,
+        cat_features: List = None,
+        is_filter=True,
         params=None,
         select_method='predictive',
         min_candidate_features=200,
@@ -44,13 +47,20 @@ class FeatureGeneration(object):
         y = ds[[label]]
 
         # step1: 衍生
-        candidate_features= self.basic_generation(X, report_dir)
+        candidate_features = self.basic_generation(X, cat_features, report_dir)
+
+        if not is_filter:
+            X, _ = transform(X, candidate_features)
+            # 组装
+            X[label] = y[label]
+            return X
 
         # step2: 筛选
-        new_X = self.booster_filter(
+        X = self.booster_filter(
             X,
             y,
             candidate_features,
+            cat_features,
             params,
             select_method,
             min_candidate_features,
@@ -60,24 +70,25 @@ class FeatureGeneration(object):
             report_dir,
         )
         # 组装
-        new_X[label] = y[label]
+        X[label] = y[label]
 
-        return new_X
-
+        return X
 
     def basic_generation(
         self,
         X: pd.DataFrame,
+        cate_features: List = None,
         report_dir: str = 'encode',
     ):
         """ 基于衍生算子产生大量候选特征 """
-        candidate_features = self.bg.fit(X=X, report_dir=report_dir)
+        candidate_features = self.bg.fit(X, cate_features)
 
         logger.info(
             f"===== candidate_features number: {len(candidate_features)} ====="
         )
         # 存储结果
         stage1 = pd.DataFrame({'candidate_features': candidate_features})
+        os.makedirs(report_dir, exist_ok=True)
         stage1.to_csv(report_dir + "/candidate_features.csv", index=False)
 
         return candidate_features
@@ -87,19 +98,21 @@ class FeatureGeneration(object):
         X: pd.DataFrame,
         y: pd.DataFrame,
         candidate_features: List[str],
+        cate_features: List = None,
         params=None,
         select_method='predictive',
         min_candidate_features=200,
-        blocks=2,
+        blocks=5,
         ratio=0.5,
         distributed_and_multiprocess=-1,
         report_dir="encode",
     ):
         """ 基于提升法对特征进行筛选出有效特征 """
-        selected_feature, candidate_features_scores, new_X = self.bs.fit(
+        selected_feature, new_X = self.bs.fit(
             X,
             y,
             candidate_features,
+            cate_features,
             params,
             select_method,
             min_candidate_features,
@@ -108,17 +121,9 @@ class FeatureGeneration(object):
             distributed_and_multiprocess,
         )
 
-        logger.info(
-            f"===== selected_feature: {selected_feature} ====="
-        )
-        stage1_dic = {'stage1': [],'score': []}
-        for fea, sc in candidate_features_scores:
-            stage1_dic['stage1'].append(tree_to_formula(fea))
-            stage1_dic['score'].append(sc)
-        stage1 = pd.DataFrame(stage1_dic)
-        stage1.to_csv(report_dir + "/candidate_features_scores.csv", index=False)
-
-        stage2 = pd.DataFrame({'selected_feature': selected_feature})
-        stage2.to_csv(report_dir + "/selected_feature.csv", index=False)
+        logger.info(f"===== selected_feature: {selected_feature} =====")
+        stage1 = pd.DataFrame({'selected_feature': selected_feature})
+        os.makedirs(report_dir, exist_ok=True)
+        stage1.to_csv(report_dir + "/selected_feature.csv", index=False)
 
         return new_X

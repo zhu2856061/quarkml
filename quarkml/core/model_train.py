@@ -30,18 +30,16 @@ class TreeModel(object):
         y_train,
         X_test=None,
         y_test=None,
-        categorical_features=None,
+        cat_features=None,
         params=None,
-        seed=2023,
     ):
 
         return lgb_train(x_train,
                          y_train,
                          X_test,
                          y_test,
-                         categorical_features,
-                         params,
-                         seed=seed)
+                         cat_features,
+                         params)
 
     def lgb_model_cv(
         self,
@@ -49,19 +47,14 @@ class TreeModel(object):
         y_train,
         X_test=None,
         y_test=None,
-        categorical_features=None,
+        cat_features=None,
         params=None,
         folds=5,
-        seed=2023,
         distributed_and_multiprocess=-1,
-        job=-1,
     ):
-        start = time.time()
+        kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=2023)
 
-        kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
-
-        if job < 0:
-            job = os.cpu_count()
+        job = os.cpu_count() - 2
 
         if distributed_and_multiprocess == 1:
             lgb_train_remote = ray.remote(lgb_train)
@@ -87,9 +80,8 @@ class TreeModel(object):
                     trn_y,
                     val_x,
                     val_y,
-                    categorical_features,
+                    cat_features,
                     params,
-                    seed=seed,
                 )
             elif distributed_and_multiprocess == 2:
                 futures = pool.apply_async(lgb_train, (
@@ -97,12 +89,8 @@ class TreeModel(object):
                     trn_y,
                     val_x,
                     val_y,
-                    categorical_features,
+                    cat_features,
                     params,
-                    None,
-                    None,
-                    'importance',
-                    seed,
                 ))
             else:
                 futures = lgb_train(
@@ -110,9 +98,8 @@ class TreeModel(object):
                     trn_y,
                     val_x,
                     val_y,
-                    categorical_features,
+                    cat_features,
                     params,
-                    seed=seed,
                 )
             futures_list.append(futures)
 
@@ -162,9 +149,6 @@ class TreeModel(object):
             logger.info(f"ks_mean:{np.mean(cv_ks)}")
             logger.info(f"ks_std:{np.std(cv_ks)}")
 
-            logger.info(
-                f'************************************ [lgb_model_cv] cost time: {time.time()-start} ************************************'
-            )
             return np.mean(cv_auc), np.mean(cv_ks)
 
         return 0, 0
@@ -197,102 +181,3 @@ class TreeModel(object):
             use_gpu,
             report_dir,
         )
-
-    def lgb_model_cv_stack(
-        self,
-        X_train,
-        y_train,
-        X_test=None,
-        categorical_features=None,
-        params=None,
-        folds=5,
-        seed=2023,
-        distributed_and_multiprocess=-1,
-        job=-1,
-    ):
-        start = time.time()
-
-        kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
-
-        if job < 0:
-            job = os.cpu_count()
-
-        if distributed_and_multiprocess == 1:
-            lgb_train_remote = ray.remote(lgb_train)
-        elif distributed_and_multiprocess == 2:
-            pool = Pool(job)
-
-        futures_list = []
-        for i, (train_index, valid_index) in enumerate(kf.split(X_train, y_train)):
-            logger.info(
-                f'************************************ {i + 1} ************************************'
-            )
-
-            trn_x = X_train.iloc[train_index]
-            trn_y = y_train.iloc[train_index]
-
-            val_x = X_train.iloc[valid_index]
-            val_y = y_train.iloc[valid_index]
-
-            if distributed_and_multiprocess == 1:
-                futures = lgb_train_remote.remote(
-                    trn_x,
-                    trn_y,
-                    val_x,
-                    val_y,
-                    categorical_features,
-                    params,
-                    seed=seed,
-                )
-            elif distributed_and_multiprocess == 2:
-                futures = pool.apply_async(lgb_train, (
-                    trn_x,
-                    trn_y,
-                    val_x,
-                    val_y,
-                    categorical_features,
-                    params,
-                    None,
-                    None,
-                    'importance',
-                    seed,
-                ))
-            else:
-                futures = lgb_train(
-                    trn_x,
-                    trn_y,
-                    val_x,
-                    val_y,
-                    categorical_features,
-                    params,
-                    seed=seed,
-                )
-            futures_list.append(futures)
-
-        if distributed_and_multiprocess == 2:
-            pool.close()
-            pool.join()
-
-        if distributed_and_multiprocess == 1:
-            futures_list = [_ for _ in ray.get(futures_list)]
-        elif distributed_and_multiprocess == 2:
-            futures_list = [_.get() for _ in futures_list]
-
-        auc_ks_result = []
-        for i, items in enumerate(futures_list):
-            try:
-                test_pred = items[0].predict(
-                    X_test,
-                    num_iteration=items[0]._best_iteration,
-                )
-                auc_ks_result.append(test_pred)
-            except:
-                logger.warning("eval error")
-
-
-        auc_ks_result = np.array(auc_ks_result)
-        auc_ks_result = np.mean(auc_ks_result, axis=-1)
-        logger.info(
-            f'************************************ [lgb_model_cv] cost time: {time.time()-start} ************************************'
-        )
-        return auc_ks_result

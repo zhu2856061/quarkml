@@ -154,8 +154,9 @@ class Node(object):
             elif self.name == "Combine":
                 temp = d1.astype(str) + '_' + d2.astype(str)
                 temp[d1.isna() | d2.isna()] = np.nan
-                temp, _ = temp.factorize()
-                new_data = pd.Series(temp, index=d1.index).astype("float64")
+                # temp, _ = temp.factorize()
+                temp, _ = pd.factorize(temp)
+                new_data = pd.Series(temp, index=d1.index)
             elif self.name == "CombineThenFreq":
                 temp = d1.astype(str) + '_' + d2.astype(str)
                 temp[d1.isna() | d2.isna()] = np.nan
@@ -279,16 +280,13 @@ def file_to_node(path):
 
 
 def transform(data: pd.DataFrame,
-              new_features_list: List[str] = None,
+              new_features: List[str],
               tmp_save_path: str = './booster_tmp_data.feather',
-              report_dir="encode",
               n_jobs=4):
 
-    if new_features_list is None:
-        new_features_list = from_csv(report_dir)
-    else:
-        new_features_list = [formula_to_tree(fea) for fea in new_features_list]
-    if new_features_list is None:
+    new_features_obj = [formula_to_tree(fea) for fea in new_features]
+
+    if new_features_obj is None:
         return data
     data.index.name = 'openfe_index'
     data.reset_index().to_feather(tmp_save_path)
@@ -297,22 +295,19 @@ def transform(data: pd.DataFrame,
     start = datetime.now()
     ex = ThreadPoolExecutor(n_jobs)
     results = []
-    for feature in new_features_list:
+    for feature in new_features_obj:
         results.append(ex.submit(trans, feature))
     ex.shutdown(wait=True)
     logger.info(f"Time spent calculating new features {datetime.now()-start}.")
-    _data = []
+    _data = {}
     names = []
-    names_map = {}
     cat_feats = []
     for i, res in enumerate(results):
         is_cat, d1, f = res.result()
-        names.append('booster_f_%d' % i)
-        names_map['booster_f_%d' % i] = f
-        _data.append(d1)
-        if is_cat: cat_feats.append('booster_f_%d' % i)
-    _data = np.vstack(_data)
-    _data = pd.DataFrame(_data.T, columns=names, index=data.index)
+        names.append(new_features[i])
+        _data[new_features[i]] = d1
+        if is_cat: cat_feats.append(new_features[i])
+    _data = pd.DataFrame(_data)
     for c in _data.columns:
         if c in cat_feats:
             _data[c] = _data[c].astype('category')
@@ -321,7 +316,7 @@ def transform(data: pd.DataFrame,
     _data = pd.concat([data, _data], axis=1)
     logger.info("Finish transformation.")
     os.remove(tmp_save_path)
-    return _data, names
+    return _data, cat_feats
 
 def trans(feature: Node, tmp_save_path: str = './booster_tmp_data.feather',):
     try:
@@ -365,9 +360,11 @@ def to_csv(features_scores, file_dir):
         stage1 = pd.DataFrame(stage1_dic)
         stage1.to_csv(file_dir + "/booster.csv", index=False)
 
-def get_categorical_numerical_features(ds: pd.DataFrame):
+def get_cat_num_features(ds: pd.DataFrame, cat_feature: List = None):
     # 获取类别特征，除number类型外的都是类别特征
     categorical_features = list(ds.select_dtypes(exclude=np.number))
+    if cat_feature is not None:
+        categorical_features = list(set(categorical_features) | set(cat_feature))
     numerical_features = []
     for feature in ds.columns:
         if feature in categorical_features:

@@ -1,66 +1,202 @@
-## quarkml
+# quarkml
 
-### 介绍
+## 介绍
+
 适用于风控算法领域，集 特征处理，特征工程，模型训练， 树模型分布式训练等功能于一体的自动化工具
 主要功能：
     1. 特征工程
-       a. 特征处理，分类特征转换数值index，空值填充，异常值去除, 特征分析报告打印
-       b. 特征衍生，基于内置的算子进行自动衍生
-       c. 特征选择，可对自身特征进行筛选，也可只对衍生特征进行筛选
+       a. 特征处理，分类特征转换数值index，空值填充，异常值去除, 数据压缩，特征分析报告打印
+       b. 特征衍生，基于内置的算子进行自动衍生，并基于booster方法进行筛选海量衍生特征
+       c. 特征选择，对自特征进行筛选【fwiz，iv，psi，tmodel】
     2. 模型工程
-       a. 模型交叉验证，提供lgb多进程训练，分布式训练，常规训练，用于验证模型性能
-       b. 模型训练，提供树模型多进程训练，分布式训练，常规训练
-       c. 模型解释性，自动化产生shap 模型解释图
+       a. 模型交叉验证，用于验证模型性能
+       b. 模型超参
+       c. 模型训练，提供树模型多进程训练，分布式训练，常规训练
+       d. 模型解释性，自动化产生shap 模型解释图
 
 ### 特征工程 FeatureEngineering 功能介绍
 
-#### 数据预处理 data_processing()
+#### 1 数据预处理
 
-```
-ds: pd.DataFrame, 原始数据 （必选项）
-label_name: str,  原始数据的label （必选项）
-cat_feature: list = [], 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
-num_feature: list = [], 指定连续特征， （非选项）， 若为空，则会利用原始数据的number类型 设置 为num
-ordinal_number=100, 指定数值特征若唯一值总数小于ordinal_number，则会划分成类别特征， （非选项）， 若为空，默认 100
-report_dir="./encode", 对离散特征的值进行encode 编码，转换成数字index, 转换对应的映射关系为存储在report_dir路径下data_processing.pkl
-is_fillna=True, 是否填充nan值，连续值填充众数，离散值填充均值
-drop_outliers=True, 是否删除异常点
-verbosity=True, 是否打印数据质量报告，html打开查看
-task='fit', fit 为将数据处理，将生成新的数据样式，transform 为来一份新数据能基于同样的方法转换数据
+##### 1.1 功能
+
+1. 划分数据集中的类别特征和数值特征
+   其中会根据数据中数值特征的唯一值总量进行判断，若总量小于ordinal_number（可配置参数），会划入类别特征
+2. 缺失值填充
+   对类别特征的填充采用数据中的众数，对数值特征的填充采用数据中的均值
+   会保留每个特征的填充逻辑，方便后续新数据复用
+3. 异常值删除
+   检测异常的方法一：均方差
+   在统计学中，如果一个数据分布近似正态，
+   那么大约 68% 的数据值会在均值的一个标准差范围内，
+   大约 95% 会在两个标准差范围内，
+   大约 99.7% 会在三个标准差范围内。
+   这里采用3个标准差以外的进行去除
+
+4. 对离散特征进行数值化，tokenizer
+   对每列特征进行转换index, [男， 女] -> [0, 1] 并保留{男: 0, 女: 1}
+   会保留每个特征的tokenizer逻辑，方便后续新数据复用
+
+5. 展示数据中的每个 feature-label 分布
+   会展示数据的基础信息和基本描述
+   会有每个特征与目标的分布，保存图到本地
+   会给出整数据的详细分析报告，保存为html形式，可直接打开查看
+
+6. 对数据进行压缩
+   对数据中的数值化数据进行分析，判断数据的中最大最小范围，然后对数据采用合理的数据类型【int64-int32-int16-float64-float32-float16】等
+
+##### 1.2 API
+
+1. data_processing_fit()
+
+1.1 描述
+
+```python
+data_processing_fit(
+  ds: str | pd.DataFrame,
+  label: str,
+  cat_feature: List = [],
+  num_feature: List = [],
+  ordinal_number=100,
+  is_fillna=False,
+  drop_outliers=False,
+  is_token=True,
+  verbosity=False,
+  compress=False,
+  report_dir="./encode",
+)
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理后的新文件路径（处理后的数据文件）， 若传入DataFrame，则返回新的DataFrame
+label: str,  原始数据的label （必选项）
+cat_feature: list = [], 指定类别特征， （非选项）， 若为空，则会利用上述【功能1】获得
+num_feature: list = [], 指定连续特征， （非选项）， 若为空，则会利用上述【功能1】获得
+ordinal_number=100, 指定数值特征若唯一值总数小于ordinal_number，则会划分成类别特征，用于【功能1】， （非选项）， 若为空，默认 100
+is_fillna=False, 是否自动缺失值填充【功能2】，连续值填充众数，离散值填充均值
+drop_outliers=False, 是否异常值删除【功能3】
+is_token=True, 是否数值化【功能4】
+verbosity=False, 是否展示分析报告【功能5】
+compress=False, 是否对数据进行压缩【功能6】
+report_dir="./encode", 上述功能产生的中间结果都会落到该文件夹内
 ```
 
-使用样例(所有示例均可在experiment中运行测试)
-``` python
+1.2 使用样例(所有示例均可在experiment中运行测试)
+
+```python
+from quarkml.feature_engineering import FeatureEngineering
 FE = FeatureEngineering()
-ME = ModelEngineering()
-ds = pd.read_csv("../experiment/credit/credit.csv")
-ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
+# 直接文件路径模式
+ds, cat, con = FE.data_processing_fit("credit.csv", 'class')
+
+# dataframe 模式
+ds = pd.read_csv("credit.csv")
+ds, cat, con = FE.data_processing_fit(ds, 'class')
+
 ```
 
-#### 特征衍生 feature_generation
+#### 2 数据预处理-新数据转换
 
-```
-X: pd.DataFrame, 原始数据 （必选项）
-categorical_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
-numerical_features: list = None,   指定连续特征， （非选项）， 若为空，则会利用原始数据的number类型 设置 为num
-report_dir: str = 'encode', 衍生产生特征的逻辑将存储在report_dir路径下 generation, 若为空，默认 encode
-method: str = "basic", 衍生方法：目前就只有basic 方法 , 若为空，默认 basic
+与上述的数据预处理配套使用
+
+##### 2.1 功能
+
+1. 利用上述数据预处理的中间结果对新的数据进行转换，能够实现与上述数据预处理逻辑一致（有利于预估使用）
+
+##### 2.2 API
+
+1. data_processing_transform()
+
+1.1 描述
+
+```python
+data_processing_transform(
+  ds: pd.DataFrame,
+  label: str,
+  verbosity=False,
+  compress=False,
+  report_dir="./encode",
+)
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理后的新文件路径（处理后的数据文件）， 若传入DataFrame，则返回新的DataFrame
+label: str,  原始数据的label （必选项）
+verbosity=False, 是否展示分析报告【功能5】
+compress=False, 是否对数据进行压缩【功能6】
+report_dir="./encode", 利用数据预处理的中间结果进行一致性转换数据
 ```
 
-使用样例
+1.2 使用样例(所有示例均可在experiment中运行测试)
+
+```python
+from quarkml.feature_engineering import FeatureEngineering
+FE = FeatureEngineering()
+
+# 直接文件路径模式
+ds, cat, con = FE.data_processing_transform("credit.csv", 'class')
+
+# dataframe 模式
+ds = pd.read_csv("credit.csv")
+ds, cat, con = FE.data_processing_transform(ds, 'class')
+```
+
+#### 3 特征衍生
+
+##### 3.1 功能
+
+1. 对给予数据进行特征衍生，产生大量的候选特征集
+2. 对衍生后的候选特征集进行筛选，获得最终对效果指标有意义的特征集
+
+##### 3.2 API
+
+1. feature_generation()
+
+1.1 描述
+
+```python
+feature_generation(
+   ds: str | pd.DataFrame,
+   label: str,
+   cat_features: List = None,
+   is_filter=True,
+   params=None,
+   select_method='predictive',
+   min_candidate_features=200,
+   blocks=5,
+   ratio=0.5,
+   distributed_and_multiprocess=-1,
+   report_dir="encode",
+)
+
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理后的新文件路径（处理后的数据文件）， 若传入DataFrame，则返回新的DataFrame
+label: str,  原始数据的label （必选项）
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+is_filter: 是否对衍生后的特征进行筛选，由于衍生的特征数巨大，所以默认为True
+params: 特征筛选过程中树模型的参数（非选项）， 若为空，有默认参数
+select_method: 筛选的评估指标，predictive -> 提升收益，corr 为与目标的相关度
+min_candidate_features: 最小候选特征，若每个block后，候选特征小于最小候选特征，就停止block了
+blocks： 主要是用于booster 中对数据进行增量式划分成多个数据块
+ratio：主要是用于booster 中candidate_features被淘汰ratio=0.5 一半了就，可以直接全量数据进行淘汰了，数据量越大，该值应该设置越小一般在0.2 ~ 0.5
+distributed_and_multiprocess=-1， 三种运行模式【常规 -1，多进程 2，分布式 1】
+report_dir="./encode", 中间结果存储
+```
+
+1.2 使用样例(所有示例均可在experiment中运行测试)
 
 ``` python
-X = ds.drop('class', axis=1)
-y = ds[['class']]
-candidate_features = FE.feature_generation(X, cat, con)
+# 直接文件路径模式
+ds = FE.feature_generation("credit.csv", 'class', is_filter=True)
+# dataframe 模式
+ds = FE.feature_generation(ds, 'class', cat, is_filter=True)
 ```
 
-#### 特征选择 feature_selector
-具备5中特征选择方法【booster，fwiz，iv，psi，tmodel】，其中除fwiz 方法外，其他方法均具备三种运行模式【常规，多进程，分布式】
+#### 4 特征选择
+
+##### 4.1 功能
+
+1. 对提供的数据集进行计算特征的IV值，并基于IV的过滤条件去掉某些特征
+2. 对提供的数据集进行计算特征的PSI值，并基于PSI的过滤条件去掉某些特征
+3. 对提供的数据集进行计算特征的fwiz值（最大最小相关性），并基于fwiz的过滤条件去掉某些特征
+4. 对提供的数据集进行计算特征的重要性（tmodel），并基于特征的重要性去掉某些特征
+
+具备4中特征选择方法【fwiz，iv，psi，tmodel】，其中除fwiz 方法外，其他方法均具备三种运行模式【常规，多进程，分布式】
 小数据量下运行耗时H比较 H(多进程) < H(常规) < H(分布式)
 大数据量下单机无法运行时 - 推荐用分布式
-
-booster 提升法，该方法只能针对衍生特征进行，逻辑为，原始特征构建出数据的初始分，然后单衍生特征训练比较与初始化的提升量，若两两特征的提升量相似，则去掉其中一个，最后选择提升为正向的特征
 
 fwiz 基于SULOV（搜索不相关的变量列表），SULOV 注定只能针对连续值，
 SULOV算法基于本文中解释的最小冗余最大相关性（MRMR）算法，该算法是最佳特征选择方法之一
@@ -75,138 +211,198 @@ tmodel 基于树模型训练后的特征重要性进行选择，其中有4种特
     - shap 类似permutation， 只是更加严格，【具体可学习Shap 值】
     - all 是综合上述三种方法选出的特征交集
 
-```
-X: pd.DataFrame,  原始数据X （必选项）
-y: pd.DataFrame,  原始数据label （必选项）
-candidate_features: list[str] = None,  候选特征，主要来自feature_generation方法衍生出来的特征，不为None的话，将在这个candidate_features内进行筛选，为None 的话，将在X.columns 的列表内筛选
-categorical_features: list[str] = None,  指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
-numerical_features: list[str] = None,    指定连续特征， （非选项）， 若为空，则会利用原始数据的number类型 设置 为num
-params: dict = None,  lgb模型的参数，主要是用于booster 筛选方法和 tmodel 筛选方法，非必选项，若没有，会采用系统默认的
-tmodel_method='mean',  tmodel_method方法会采用5折交叉得到重要性，因为会有5次重要性，选择mean即使对这5次进行均值后比大小，选择max即使选择最大的
-init_score: pd.DataFrame = None,  初始分，用另一个模型分预测分作为模型的初始预估分，若为None，则会在booster 方法中自动训练一个初始分，只用于method为booster
-importance_metric: str = 'importance',  tmodel_method方法得到的重要性分为4种方式的 ： importance， permutation， shap， all
-select_method='predictive',  主要是用于booster 筛选方法中评估两个特征相似，是采用估计的方式predictive 还是corr 相关性的方式
-min_candidate_features=200,  主要是用于booster 中最小候选数量的话，可以直接全量数据进行淘汰了，数据量越大，该值应该设置越小一般在200 - 2000
-blocks=2,  主要是用于booster 中对数据进行增量式划分成多个数据块
-ratio=0.5, 主要是用于booster 中candidate_features被淘汰ratio=0.5 一半了就，可以直接全量数据进行淘汰了，数据量越大，该值应该设置越小一般在0.2 ~ 0.5
-folds=3, 交叉验证的数据划分份数，用于tmodel
-seed=2023, 随机种子
+##### 4.2 API
+
+1. feature_selector()
+
+1.1 描述
+
+```python
+feature_selector(
+ds: str | pd.DataFrame,
+label: str,
+part_column: str = None,
+cate_features: List[str] = None,
+part_values: List = None,
+bins=10,
+importance_metric: str = "importance",
+method: str = "fwiz",
+distributed_and_multiprocess=-1,
+report_dir="encode",
+)
+
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理后的新文件路径（处理后的数据文件）， 若传入DataFrame，则返回新的DataFrame
+label: str,  原始数据的label （必选项）
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 part_column: str = None,  划分列，主要是用于PSI筛选特征的方法内，表明用这个一列进行划分数据集，然后比较每个数据两两之间的差异，当method为psi 时是必选项
+part_values: str = None,  划分列，与part_column 一起用，表明用这个一列按part_values list 内的值进行划分，然后比较每个数据两两之间的差异（非选项）， 若为空，将去part_column列中的所有值
 bins=10,: IV计算中的分桶数
-
-report_dir="encode", 特征筛选过程中的一些中间结果存在路径
-method: str = "booster", 特征筛选的方法：fwiz ， iv ， psi ， tmodel， booster ， 注fwiz-基于SULOV（搜索不相关的变量列表）
+importance_metric: str = 'importance',  tmodel_method方法得到的重要性分为3种方式的 ： importance， permutation， shap
+method: str = "booster", 特征筛选的方法：fwiz ， iv ， psi ， tmodel ， 注fwiz-基于SULOV（搜索不相关的变量列表）
 distributed_and_multiprocess=-1， 三种运行模式【常规 -1，多进程 2，分布式 1】
-job=-1,  主要是用于booster 中开启多个线程进行加快处理 -1 为cpu核数
+report_dir="encode", 特征筛选过程中的一些中间结果存在路径
 ```
 
-使用样例
+1.2 使用样例(所有示例均可在experiment中运行测试)
+
 ``` python
-X = ds.drop('class', axis=1)
-y = ds[['class']]
-candidate_features = FE.feature_generation(X, cat, con)
-
-# 对衍生的特征进行筛选
-# step3.1
-selected_feature, ds = FE.feature_selector(X, y, candidate_features, cat, con, part_column='age', method='booster')
-print("-1.1->", selected_feature)
-
-# step3.2
-selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, part_column='age', method='tmodel')
-print("-1.2->", selected_feature)
-
-# step3.3
-selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, part_column='age', method='fwiz')
-print("-2->", selected_feature)
-
-# step3.4
-selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, part_column='age', method='iv')
-print("-3->", selected_feature)
-
-# step3.5
-selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, part_column='age', method='psi')
-print("-4->", selected_feature)
-
-# -----------------------------------------------------------------
-X = ds.drop('class', axis=1)
-y = ds[['class']]
-# 对自身特征进行筛选
-# step3.2
-
-selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='tmodel')
-print("-1.2->", selected_feature)
-
-# step3.3
-selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='fwiz')
-print("-2->", selected_feature)
-
-# step5
-selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='iv')
-print("-3->", selected_feature)
-
-# step6
-selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='psi')
-print("-4->", selected_feature)
-
+ds = FE.feature_selector(ds, 'class', method='fwiz')
+ds = FE.feature_selector(ds, 'class', cate_features=cat,  method='iv')
+ds = FE.feature_selector(ds, 'class', part_column='age', cate_features=cat,  method='psi')
+ds = FE.feature_selector(ds, 'class', cate_features=cat,  method='tmodel')
 ```
 
 ### 模型工程 ModelEngineering
 
-基于lgb的模型训练，交叉验证，基于shap的模型可解释性
-基于ray的分布式，多进程训练
+(树模型-lightgbm)
+a. 模型超参
+b. 模型交叉验证，用于验证模型性能
+c. 模型训练，提供树模型多进程训练，分布式训练，常规训练
+d. 模型解释性，自动化产生shap 模型解释图
 
-#### 模型交叉验证 model_cv
-lgb 模型
-```
-X: pd.DataFrame,  原始数据X （必选项）
-y: pd.DataFrame,  原始数据label （必选项）
-train_index=None, 训练数据的下标， 不指定将直接对数据进行划分7：3 随机切分
-test_index=None,  测试数据的下标
-categorical_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+#### 1 模型超参 hparams
+
+##### 1.1 功能
+
+基于提供的数据进行模型lightgbm，参数寻优，基于贝叶斯超参方式找到最优参数
+
+##### 1.2 API
+
+1. hparams()
+
+1.1 描述
+
+``` python
+hparams(
+   ds: pd.DataFrame,
+   label: str,
+   valid_ds: pd.DataFrame = None,
+   cat_features=None,
+   params=None,
+   spaces=None,
+   report_dir="encode")
+
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+label: str,  原始数据的label （必选项）
+valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
-folds=5,交叉验证的数据划分份数，用于tmodel
-seed=2023,
-distributed_and_multiprocess=-1， 三种运行模式【常规 -1，多进程 2，分布式 1】
-job=-1,  主要是用于booster 中开启多个线程进行加快处理 -1 为cpu核数
+spaces=None, 寻参的设置空间， 熟悉hyperopt应该知道怎么配置
+report_dir="encode"
 ```
 
 使用样例
+
 ``` python
-ME.model_cv(ds, y)
+best_params_hyperopt = ME.hparams(ds, 'class', cat_features=cat)
 ```
 
-#### 模型训练 model
-lgb 模型
-```
-X: pd.DataFrame,  原始数据X （必选项）
-y: pd.DataFrame,  原始数据label （必选项）
+#### 2 模型交叉验证 model_cv
 
-train_index=None, 训练数据的下标， 不指定将直接对数据进行划分7：3 随机切分
-test_index=None,  测试数据的下标
-categorical_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+##### 2.1 功能
+
+基于提供的数据进行lightgbm的交叉验证，能够进行分布式训练加快验证流程
+
+##### 2.2 API
+
+``` python
+
+model_cv(
+   ds: pd.DataFrame,
+   label: str,
+   valid_ds: pd.DataFrame = None,
+   categorical_features=None,
+   params=None,
+   folds=5,
+   distributed_and_multiprocess=-1,
+)
+
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+label: str,  原始数据的label （必选项）
+valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
-seed=2023,
+folds=5,交叉验证的数据划分份数，用于tmodel
+distributed_and_multiprocess=-1， 三种运行模式【常规 -1，多进程 2，分布式 1】
+```
+
+使用样例
+
+``` python
+ME.model_cv(ds, 'class')
+```
+
+#### 3 模型训练 model
+
+##### 3.1 功能
+
+基于提供的数据进行lightgbm的训练
+
+##### 3.2 API
+
+``` python
+
+model(
+   ds: pd.DataFrame,
+   label: str,
+   valid_ds: pd.DataFrame = None,
+   cat_features=None,
+   params=None,
+   report_dir="encode",
+)
+
+ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+label: str,  原始数据的label （必选项）
+valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
 report_dir="encode" lgb模型训练保存的路径report_dir下的 loan_model.pkl
 ```
 
 使用样例
+
 ``` python
-ME.model(ds, y)
+ME.model(ds, 'class')
 ```
 
-#### 模型解释性 model_interpretable
+#### 4 模型解释性 model_interpretable
+
+##### 4.1 功能
+
+   1. 基于训练好的模型，对模型为何对这个样本打出这样的分，进行单实例分析
+   2. 基于训练好的模型，对模型为何对一个群体样本打出这样的分，进行多实例分析整体分析
+   3. 给出该模型对这些样本预估出来的结果分析，给出特征重要性
+
+
+##### 4.2 API
+
+1. interpretable()
+
 ```
-model, 训练完的lgb模型
-X: pd.DataFrame, 不含 label 的原始数据
+interpretable(
+   task,
+   model,
+   X: pd.DataFrame,
+   single_index: int = -1,
+   muli_num: int = -1,
+   is_importance=False,
+)
+
+task: 回归或者分类 ： 回归 -> regression   分类 -> class
+model: 上述训练的模型，需要解释的模型
+single_index: 单实例分析，-1 为不进行分析， single_index 为 X 数据的样本下标
+muli_num: 多实例分析，-1 为不进行分析，muli_num 为 X 数据的前muli_num个样本
+is_importance： 是否给出特征重要性
 ```
 
 使用样例
+
 ``` python
-ME.interpretable(tm, X)
+ME.interpretable('regression', tm, X, single_index=1)
 ```
 
 ----
-### 【新增】分布式树模型训练，需对数据和模型进行改造
+# 【新增】分布式树模型训练，需对数据和模型进行改造
 
 特征工程中的FeatureEngineering新增方法 dist_data_processing 分布式特征处理，并将数据转换成分布式数据样式，懒加载模式
 
@@ -253,6 +449,7 @@ report_dir = './encode/dist_model', 模型保存位置
 ```
 
 使用样例
+
 ``` python
 ds, categorical_features, numerical_features = FE.dist_data_processing("experiment/credit/credit.csv", 'class')
 
@@ -260,6 +457,8 @@ ME.dist_model(ds, 'class', categorical_features=categorical_features)
 ```
 
 ---
+
+# 环境
 
 ```
 1 安装 
@@ -272,117 +471,4 @@ ME.dist_model(ds, 'class', categorical_features=categorical_features)
 这里只演示启动head 节点，并在head节点运行，因此 ray.init() 并没有设置
 ```
 
-## 完整流程案例-常规
-``` python
-
-import pandas as pd
-from quarkml.feature_engineering import FeatureEngineering
-from quarkml.model_engineering import ModelEngineering
-FE = FeatureEngineering()
-ME = ModelEngineering()
-
-import ray
-# ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
-runtime_envs = {"working_dir": ".."}
-context = ray.init(runtime_env = runtime_envs)
-print(context.dashboard_url)
-
-# step1
-ds = pd.read_csv("../experiment/credit/credit.csv")
-ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
-print("-1->", ds)
-# # step1.1
-# testds = pd.read_csv("../experiment/credit/credit-g.arff")
-# ds = FE.data_processing(testds, 'class', task='tranform', verbosity=False)
-# print("-2->", ds)
-# step2
-X = ds.drop('class', axis=1)
-y = ds[['class']]
-
-
-# selected_feature = FE.feature_generation(X, cat, con)
-
-# step3.1
-# selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, method='booster', distributed_and_multiprocess=2)
-# print("-3.1->", selected_feature)
-
-# step3.2
-# selected_feature, ds = FE.feature_selector(X, y, None, cat, con, method='tmodel', distributed_and_multiprocess=1)
-# print("-3.2->", selected_feature)
-
-# step3.3
-# selected_feature, ds = FE.feature_selector(X, y, selected_feature, cat, con, method='fwiz')
-# print("-3.3->", selected_feature)
-
-# step3.4
-# selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='iv', distributed_and_multiprocess=-1)
-# print("-3.4->", selected_feature)
-
-# step3.5
-# selected_feature, ds = FE.feature_selector(X, y, None, cat, con, part_column='age', method='psi', distributed_and_multiprocess=2)
-# print("-3.5->", selected_feature)
-
-# step4.1
-# best_params = ME.hparams(X, y, method='hyperopt')
-# print("-4.1-->", best_params)
-
-# step4.2
-# best_params = ME.hparams(X, y, method='optuna')
-# print("-4.2-->", best_params)
-
-# step5.1
-# ME.model_cv(X, y, distributed_and_multiprocess=-1, params=best_params)
-
-# step5.2
-# ME.model(X, y, params=best_params)
-
-
-ray.shutdown()
-```
-
-
-## 完整流程案例-分布式
-``` python
-
-import ray
-import pandas as pd
-
-from quarkml.feature_engineering import FeatureEngineering
-from quarkml.model_engineering import ModelEngineering
-FE = FeatureEngineering()
-ME = ModelEngineering()
-runtime_envs = {"working_dir": ".."}
-context = ray.init(runtime_env = runtime_envs)
-print(context.dashboard_url)
-
-# 读取数据
-# step1
-# ds = pd.read_csv("../experiment/credit/credit.csv")
-# ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
-# print("-1->", ds)
-# tr_ds = ds[:800]
-# va_ds = ds[800:]
-
-# tr_x = tr_ds.drop('class', axis=1)
-# tr_y = tr_ds[['class']]
-# va_x = va_ds.drop('class', axis=1)
-# va_y = va_ds[['class']]
-
-# tr_ds = FE.dist_data_processing(ds=tr_ds)
-# va_ds = FE.dist_data_processing(ds=va_ds)
-# print("-1->", tr_ds.schema().types)
-# print("-1.1->", tr_ds.count())
-# print("-2->", tr_ds.take(4))
-
-# ME.dist_model(tr_ds, 'class', va_ds)
-
-
-# ME.model(tr_x,tr_y, va_x, va_y)
-
-ds, categorical_features, numerical_features = FE.dist_data_processing("experiment/credit/credit.csv", 'class')
-
-ME.dist_model(ds, 'class', categorical_features=categorical_features)
-
-
-ray.shutdown()
-```
+## 完整流程案例- 参考experiment中的credit的run.py脚本

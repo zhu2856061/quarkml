@@ -10,7 +10,7 @@ import ray
 from ray.util.multiprocessing import Pool
 import pandas as pd
 from typing import List, Dict, Set
-from quarkml.utils import get_categorical_numerical_features, error_callback
+from quarkml.utils import get_cat_num_features, error_callback
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -35,6 +35,7 @@ class PSI(object):
         self,
         X: pd.DataFrame,
         part_column: str,
+        cat_features: List = None,
         part_values: List = None,
         bins: int = 10,
         minimal: int = 1,
@@ -49,8 +50,9 @@ class PSI(object):
             priori: 初始每个特征的psi， 若有则会采用这个初始的，若没有则采用part_column的值[0]
         """
 
-        categorical_features, numerical_features = get_categorical_numerical_features(
-                X)
+        assert part_column is not None
+
+        categorical_features, numerical_features = get_cat_num_features(X, cat_features)
 
         job = os.cpu_count() - 2
 
@@ -64,8 +66,10 @@ class PSI(object):
         indexes = [part[part == value].index for value in all_parts]
 
         if distributed_and_multiprocess == 1:
-            _binning_numerical_remote = ray.remote(_distribution_numerical_section)
-            _binning_categorical_remote = ray.remote(_distribution_categorical_section)
+            _binning_numerical_remote = ray.remote(
+                _distribution_numerical_section)
+            _binning_categorical_remote = ray.remote(
+                _distribution_categorical_section)
         elif distributed_and_multiprocess == 2:
             pool = Pool(job)
 
@@ -83,24 +87,25 @@ class PSI(object):
                 )
             elif distributed_and_multiprocess == 2:
                 futures = pool.apply_async(_distribution_numerical_section, (
-                        X,
-                        col,
-                        indexes,
-                        all_parts,
-                        minimal,
-                        priori,
-                        bins,
-                    ), error_callback=error_callback)
+                    X,
+                    col,
+                    indexes,
+                    all_parts,
+                    minimal,
+                    priori,
+                    bins,
+                ),
+                                           error_callback=error_callback)
             else:
                 futures = _distribution_numerical_section(
-                        X,
-                        col,
-                        indexes,
-                        all_parts,
-                        minimal,
-                        priori,
-                        bins,
-                    )
+                    X,
+                    col,
+                    indexes,
+                    all_parts,
+                    minimal,
+                    priori,
+                    bins,
+                )
             futures_list.append(futures)
 
         for col in categorical_features:
@@ -117,24 +122,25 @@ class PSI(object):
 
             elif distributed_and_multiprocess == 2:
                 futures = pool.apply_async(_distribution_categorical_section, (
-                        X,
-                        col,
-                        indexes,
-                        all_parts,
-                        minimal,
-                        priori,
-                        bins,
-                    ), error_callback=error_callback)
+                    X,
+                    col,
+                    indexes,
+                    all_parts,
+                    minimal,
+                    priori,
+                    bins,
+                ),
+                                           error_callback=error_callback)
             else:
                 futures = _distribution_categorical_section(
-                        X,
-                        col,
-                        indexes,
-                        all_parts,
-                        minimal,
-                        priori,
-                        bins,
-                    )
+                    X,
+                    col,
+                    indexes,
+                    all_parts,
+                    minimal,
+                    priori,
+                    bins,
+                )
             futures_list.append(futures)
 
         if distributed_and_multiprocess == 2:
@@ -147,7 +153,7 @@ class PSI(object):
             futures_list = [_.get() for _ in futures_list]
 
         for col, items in zip(numerical_features + categorical_features,
-                                futures_list):
+                              futures_list):
 
             base[col] = items[1]
             psi_detail[col] = items[0]
@@ -166,7 +172,7 @@ class PSI(object):
             psi = psi[psi[col] < 0.25]
 
         selected_fea = list(psi['psi_var'])
-        return selected_fea, X[selected_fea], base, psi_detail, psi
+        return selected_fea, X[selected_fea], psi_detail, psi
 
 
 def _distribution_categorical_section(X: pd.DataFrame,

@@ -27,8 +27,8 @@ REQUIRED_PACKAGES = [
     'ray>=2.6.2',
     'ray[default]',
     'lightgbm_ray>=0.1.8',
-    'treelite>=3.9.0',
-    'treelite_runtime>=3.9.0',
+    'treelite>=3.0.0',
+    'treelite_runtime>=3.0.0',
 ]
 setuptools.setup(
     name="quarkml",

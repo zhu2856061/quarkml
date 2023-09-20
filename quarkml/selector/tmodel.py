@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from quarkml.model.tree_model import lgb_train
 from typing import List
-from quarkml.utils import get_categorical_numerical_features, error_callback
+from quarkml.utils import get_cat_num_features, error_callback
 import warnings
 
 warnings.filterwarnings(action='ignore', category=UserWarning)
@@ -31,12 +31,11 @@ class TModelSelector(object):
         self,
         X: pd.DataFrame,
         y: pd.DataFrame,
-        method: str = 'mean',
+        cat_features: List = None,
         params=None,
         importance_metric: str = "importance",
         folds=5,
         seed=2023,
-        report_dir: str = "encode",
         distributed_and_multiprocess=-1,
     ):
         """ method : 对于n次交叉后，取 n次的最大，还是n次的平均，mean , max
@@ -45,8 +44,7 @@ class TModelSelector(object):
             report_dir: 将保存交叉验证后的每个特征的重要性结果
             is_distributed: 分布式采用ray进行交叉验证的每次结果，否则将进行多进程的pool池模式
         """
-        categorical_features, _ = get_categorical_numerical_features(
-                X)
+        categorical_features, _ = get_cat_num_features(X, cat_features)
         job = os.cpu_count() - 2
 
         kf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
@@ -116,8 +114,7 @@ class TModelSelector(object):
         if distributed_and_multiprocess == 2:
             pool.close()
             pool.join()
-        cv_auc = []
-        cv_ks = []
+
         featrue_importance = {}
         featrue_permutation = {}
         featrue_shap = {}
@@ -146,32 +143,14 @@ class TModelSelector(object):
                 except KeyError:
                     featrue_shap[k] = [v]
 
-            if items[1]["auc_score"] is not None:
-                cv_auc.append(items[1]["auc_score"])
+        for k, v in featrue_importance.items():
+            featrue_importance[k] = np.mean(v)
 
-            if items[1]["ks_score"] is not None:
-                cv_ks.append(items[1]["ks_score"])
+        for k, v in featrue_permutation.items():
+            featrue_permutation[k] = np.mean(v)
 
-        if method == 'max':
-            idx = cv_auc.index(max(cv_auc))
-            for k, v in featrue_importance.items():
-                featrue_importance[k] = v[idx]
-
-            for k, v in featrue_permutation.items():
-                featrue_permutation[k] = v[idx]
-
-            for k, v in featrue_shap.items():
-                featrue_shap[k] = v[idx]
-
-        if method == 'mean':
-            for k, v in featrue_importance.items():
-                featrue_importance[k] = np.mean(v)
-
-            for k, v in featrue_permutation.items():
-                featrue_permutation[k] = np.mean(v)
-
-            for k, v in featrue_shap.items():
-                featrue_shap[k] = np.mean(v)
+        for k, v in featrue_shap.items():
+            featrue_shap[k] = np.mean(v)
 
         featrue_importance = sorted(featrue_importance.items(),
                                     key=lambda _: _[1],
@@ -183,22 +162,15 @@ class TModelSelector(object):
                               key=lambda _: _[1],
                               reverse=True)
 
-        selected_fea = [k for k, v in featrue_importance if v > 0]
+        if importance_metric == "importance":
+            selected_fea = [k for k, v in featrue_importance if v > 0]
+            return selected_fea, X[selected_fea], featrue_importance
 
         if importance_metric == "permutation":
             selected_fea = [k for k, v in featrue_permutation if v > 0]
+            return selected_fea, X[selected_fea], featrue_permutation
 
         if importance_metric == "shap":
             selected_fea = [k for k, v in featrue_shap if v > 0]
+            return selected_fea, X[selected_fea], featrue_shap
 
-        if importance_metric == "all":
-            selected_fea = [
-                _ for _ in selected_fea
-                if _ in [k for k, v in featrue_permutation if v > 0]
-            ]
-            selected_fea = [
-                _ for _ in selected_fea
-                if _ in [k for k, v in featrue_shap if v > 0]
-            ]
-
-        return selected_fea, X[selected_fea], featrue_importance, featrue_permutation, featrue_shap

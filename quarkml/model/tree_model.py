@@ -26,7 +26,7 @@ def lgb_train(
     trn_y: pd.DataFrame,
     val_x: pd.DataFrame = None,
     val_y: pd.DataFrame = None,
-    categorical_features: List = None,
+    cat_features: List = None,
     params=None,
     trn_init_score: pd.DataFrame = None,
     val_init_score: pd.DataFrame = None,
@@ -35,23 +35,18 @@ def lgb_train(
 ):
 
     start = time.time()
-
     featrue_importance = {}
     featrue_permutation = {}
     featrue_shap = {}
-    auc_score = None
-    ks_score = None
 
-    if categorical_features is None:
-        categorical_features, _ = _get_categorical_numerical_features(trn_x)
-
-    for cate_fea in categorical_features:
-        try:
-            trn_x[cate_fea] = trn_x[cate_fea].astype('category')
-            if val_x is not None:
-                val_x[cate_fea] = val_x[cate_fea].astype('category')
-        except:
-            continue
+    if cat_features is not None:
+        for cate_fea in cat_features:
+            try:
+                trn_x[cate_fea] = trn_x[cate_fea].astype('category')
+                if val_x is not None:
+                    val_x[cate_fea] = val_x[cate_fea].astype('category')
+            except:
+                continue
 
     if val_x is None and trn_init_score is None:
         trn_x, val_x, trn_y, val_y = train_test_split(
@@ -99,10 +94,9 @@ def lgb_train(
     else:
         params_set.update({'objective': 'multiclass'})
         params_set.update({'metric': 'auc_mu'})
-    if len(categorical_features) > 0:
+    if cat_features is not None:
         params_set.update(
-            {"categorical_feature": 'name:' + ','.join(categorical_features)})
-
+            {"categorical_feature": 'name:' + ','.join(cat_features)})
     if params is not None:
         params_set.update(params)
 
@@ -157,22 +151,10 @@ def lgb_train(
             except KeyError:
                 featrue_shap[k] = [v]
 
-    val_pred = gbm.predict(
-        val_x,
-        num_iteration=gbm._best_iteration,
-    )
-
-    if params_set['objective'] == 'regression':
-        auc_score = _auc(val_y, val_pred)
-        ks_score = _ks(val_y, val_pred)
-        logger.info(f"lgb_model: auc:{auc_score}, ks:{ks_score}")
-
     report_dict = {
         'featrue_importance': featrue_importance,
         'featrue_permutation': featrue_permutation,
         'featrue_shap': featrue_shap,
-        'auc_score': auc_score,
-        'ks_score': ks_score,
     }
 
     logger.info(

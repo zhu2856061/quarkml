@@ -14,7 +14,7 @@ from quarkml.utils import (
     Node,
     FNode,
     tree_to_formula,
-    get_categorical_numerical_features,
+    get_cat_num_features,
 )
 
 import warnings
@@ -47,42 +47,38 @@ class BasicGeneration(object):
     def __init__(self) -> None:
         pass
 
-    def fit(
-        self,
-        X: pd.DataFrame,
-    ):
+    def fit(self, X: pd.DataFrame, categorical_features: List = None):
 
-        categorical_features, numerical_features = get_categorical_numerical_features(
-            X)
+        cat_features, num_features = get_cat_num_features(
+            X, categorical_features)
+        cat_features.sort()
+        num_features.sort()
+        logger.info(f"===== 【categorical_features】: {cat_features} =====")
+        logger.info(f"===== 【numerical_features】: {num_features} =====")
 
-        logger.info(
-            f"===== 【categorical_features】: {categorical_features} =====")
-        logger.info(f"===== 【numerical_features】: {numerical_features} =====")
-
-        candidate_features_list = self._get_candidate_features(
-            categorical_features,
-            numerical_features,
+        candidate_features = self._get_candidate_features(
+            cat_features,
+            num_features,
         )
-        candidate_features_list = [
-            tree_to_formula(_) for _ in candidate_features_list
-        ]
-        candidate_features_list.sort()
 
-        return candidate_features_list
+        candidate_features = [tree_to_formula(_) for _ in candidate_features]
+        candidate_features.sort()
+
+        return candidate_features
 
     def _get_candidate_features(
         self,
-        categorical_features: List = [],
-        numerical_features: List = [],
+        cat_features: List = [],
+        num_features: List = [],
         order=1,
     ):
         # 根据给的数据特征列表获得候选特征集合
-        assert len(set(numerical_features) & set(categorical_features)) == 0
+        assert len(set(num_features) & set(cat_features)) == 0
 
         current_order_num_features = []
         current_order_cat_features = []
-        for f in numerical_features + categorical_features:
-            if f in categorical_features:
+        for f in num_features + cat_features:
+            if f in cat_features:
                 current_order_cat_features.append(FNode(f))
             else:
                 current_order_num_features.append(FNode(f))
