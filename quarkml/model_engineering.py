@@ -186,34 +186,6 @@ class ModelEngineering(object):
         if is_importance:
             self.FI.feature_dependence(task)
 
-    def dist_model(
-        self,
-        trn_ds,
-        label_name,
-        val_ds=None,
-        categorical_features=None,
-        params=None,
-        seed=2023,
-        num_workers=2,
-        trainer_resources={"CPU": 4},
-        resources_per_worker={"CPU": 2},
-        use_gpu=False,
-        report_dir='./encode/dist_model',
-    ):
-        tmodel = self.TM.lgb_distributed_train(
-            trn_ds,
-            label_name,
-            val_ds,
-            categorical_features,
-            params,
-            seed,
-            num_workers,
-            trainer_resources,
-            resources_per_worker,
-            use_gpu,
-            report_dir,
-        )
-
     def predict_2_so(self, model_path):
         # 目前只能是lightgbm
         self.PRED.compile_model(model_path)

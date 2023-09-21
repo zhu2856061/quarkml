@@ -34,11 +34,7 @@ class TreeModel(object):
         params=None,
     ):
 
-        return lgb_train(x_train,
-                         y_train,
-                         X_test,
-                         y_test,
-                         cat_features,
+        return lgb_train(x_train, y_train, X_test, y_test, cat_features,
                          params)
 
     def lgb_model_cv(
@@ -156,11 +152,10 @@ class TreeModel(object):
     def lgb_distributed_model(
         self,
         trn_ds,
-        label_name,
-        val_ds=None,
-        categorical_features=None,
+        label,
+        valid_ds=None,
+        cat_features=None,
         params=None,
-        seed=2023,
         num_workers=2,
         trainer_resources=None,
         resources_per_worker=None,
@@ -170,11 +165,10 @@ class TreeModel(object):
 
         return lgb_distributed_train(
             trn_ds,
-            label_name,
-            val_ds,
-            categorical_features,
+            label,
+            valid_ds,
+            cat_features,
             params,
-            seed,
             num_workers,
             trainer_resources,
             resources_per_worker,

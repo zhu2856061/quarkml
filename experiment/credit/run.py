@@ -12,6 +12,7 @@ import ray
 import pandas as pd
 from quarkml.feature_engineering import FeatureEngineering
 from quarkml.model_engineering import ModelEngineering
+from quarkml.distributed_engineering import DistributedEngineering
 
 ######### 启动ray 构建一个单机环境 , 单机自己测试就启动这个后再运行程序，若分布式多机，则分布式环境已经有了，无需启动
 # ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
@@ -30,13 +31,13 @@ context = ray.init(
 )
 print(context.dashboard_url)
 #########
-
 FE = FeatureEngineering()
 ME = ModelEngineering()
+DE = DistributedEngineering()
 ######### 数据处理 #########
-# ds, cat, con = FE.data_processing_fit("credit.csv", 'class')
-ds = pd.read_csv("credit.csv")
-ds, cat, con = FE.data_processing_fit(ds, 'class')
+# file_path = FE.data_processing_fit("credit.csv", 'class')
+# ds = pd.read_csv("credit.csv")
+# ds, cat, con = FE.data_processing_fit(ds, 'class')
 # print(ds)
 # # step1.1 基于新数据采用同样的处理方法
 # ds = pd.read_csv("credit.csv")
@@ -65,8 +66,8 @@ ds, cat, con = FE.data_processing_fit(ds, 'class')
 # ME.model(ds, 'class')
 # #########
 
-# ######### 训练 #########
-# ME.model(ds, 'class')
+# ######### 可解释性 #########
+# ME.interpretable('regression', tm, X, single_index=1)
 # #########
 
 # # ******************************************************************************
@@ -78,6 +79,6 @@ ds, cat, con = FE.data_processing_fit(ds, 'class')
 #     "experiment/credit/credit.csv", 'class')
 
 # ######### 训练 #########
-# ME.dist_model(ds, 'class', categorical_features=categorical_features)
-
+FE.data_processing_fit("credit.csv", 'class')
+DE.dist_model("experiment/credit/credit.csv_data_processing.csv", 'class')
 ray.shutdown()

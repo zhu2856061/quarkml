@@ -6,200 +6,89 @@
 from __future__ import absolute_import, division, print_function
 
 from quarkml.core.distributed_data_processing import DistDataProcessing
-from quarkml.core.feature_selector import FeatureSelector
 from quarkml.core.model_train import TreeModel
 from typing import List
 import pandas as pd
+from pyarrow import csv
+from ray import data as rdata
+from loguru import logger
+import time
 
 
 class DistributedEngineering(object):
 
     def __init__(self) -> None:
         self.DDP = DistDataProcessing()
-        self.FS = FeatureSelector()
-
         self.TM = TreeModel()
 
     def dist_data_processing(
         self,
-        files=None,
-        label_name: str = None,
+        ds: pd.DataFrame,
+        label: str = None,
         delimiter: str = ',',
         cat_feature: List = [],
         num_feature: List = [],
         ordinal_number=100,
         report_dir="./encode",
-        ds: pd.DataFrame = None,
     ):
 
-        if ds is not None:
-            return self.DDP.from_pandas(ds, cat_feature)
-
-        return self.DDP.fit(
-            files,
-            label_name,
-            delimiter,
-            cat_feature,
-            num_feature,
-            ordinal_number,
-            report_dir,
+        start = time.time()
+        if isinstance(ds, str):
+            ds = self.DDP.fit(
+                ds,
+                label,
+                delimiter,
+                cat_feature,
+                num_feature,
+                ordinal_number,
+                report_dir,
+            )
+        else:
+            ds = self.DDP.from_pandas(ds, cat_feature)
+        logger.info(
+            f'*************** [hparams] cost time: {time.time()-start} ***************'
         )
-
-    def dist_feature_selector(
-        self,
-        X: pd.DataFrame,
-        y: pd.DataFrame,
-        candidate_features: List[str] = None,
-        categorical_features: List[str] = None,
-        numerical_features: List[str] = None,
-        params: dict = None,
-        tmodel_method='mean',
-        init_score: pd.DataFrame = None,
-        importance_metric: str = 'importance',
-        select_method='predictive',
-        min_candidate_features=200,
-        blocks=2,
-        ratio=0.5,
-        folds=5,
-        seed=2023,
-        part_column: str = None,
-        part_values: List = None,
-        handle_zero="merge",
-        bins=10,
-        minimum=0.5,
-        minimal: int = 1,
-        priori=None,
-        use_base=True,
-        report_dir="encode",
-        method: str = "booster",
-        job=-1,
-    ):
-        distributed_and_multiprocess = 1,  # 采用分布式
-
-        assert method not in [
-            "booster", "iv", "psi", "tmodel"
-        ], "distributed method must in [booster, iv, psi, tmodel]"
-
-        if method == "booster":
-            selected_feature, new_X = self.FS.booster_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                params,
-                select_method,
-                min_candidate_features,
-                blocks,
-                ratio,
-                seed,
-                report_dir,
-                distributed_and_multiprocess,
-                job,
-            )
-
-        if method == "iv":
-            selected_feature, new_X = self.FS.iv_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                numerical_features,
-                part_column,
-                part_values,
-                handle_zero,
-                bins,
-                minimum,
-                use_base,
-                report_dir,
-                distributed_and_multiprocess,
-                job,
-            )
-
-        if method == "psi":
-            selected_feature, new_X = self.FS.psi_selector(
-                X,
-                part_column,
-                candidate_features,
-                categorical_features,
-                numerical_features,
-                part_values,
-                bins,
-                minimal,
-                priori,
-                report_dir,
-                distributed_and_multiprocess,
-                job,
-            )
-
-        if method == "tmodel":
-            selected_feature, new_X = self.FS.tmodel_selector(
-                X,
-                y,
-                candidate_features,
-                categorical_features,
-                init_score,
-                tmodel_method,
-                params,
-                importance_metric,
-                folds,
-                seed,
-                report_dir,
-                distributed_and_multiprocess,
-                job,
-            )
-
-        return selected_feature, new_X
+        return ds
 
     def dist_model(
         self,
-        trn_ds,
-        label_name,
-        val_ds=None,
-        categorical_features = None,
+        ds: rdata.Dataset,
+        label: str,
+        valid_ds: rdata.Dataset = None,
+        cat_features=None,
         params=None,
-        seed=2023,
         num_workers=2,
         trainer_resources=None,
         resources_per_worker=None,
         use_gpu=False,
-        report_dir = './encode/dist_model',
+        delimiter=",",
+        report_dir='./encode/dist_model',
     ):
-        tmodel = self.TM.lgb_distributed_model(
-                trn_ds,
-                label_name,
-                val_ds,
-                categorical_features,
-                params,
-                seed,
-                num_workers,
-                trainer_resources,
-                resources_per_worker,
-                use_gpu,
-                report_dir,
+        start = time.time()
+        if isinstance(ds, str):
+            parse_options = csv.ParseOptions(delimiter=delimiter)
+            ds = rdata.read_csv(ds, parse_options=parse_options)
+
+        if valid_ds is not None:
+            if isinstance(valid_ds, str):
+                parse_options = csv.ParseOptions(delimiter=delimiter)
+                valid_ds = rdata.read_csv(valid_ds, parse_options=parse_options)
+
+        gbm, result = self.TM.lgb_distributed_model(
+            trn_ds=ds,
+            label=label,
+            valid_ds=valid_ds,
+            cat_features=cat_features,
+            params=params,
+            num_workers=num_workers,
+            trainer_resources=trainer_resources,
+            resources_per_worker=resources_per_worker,
+            use_gpu=use_gpu,
+            report_dir=report_dir,
         )
 
-    def dist_model_cv(
-        self,
-        X_train,
-        y_train,
-        X_test=None,
-        y_test=None,
-        categorical_features=None,
-        params=None,
-        folds=5,
-        seed=2023,
-        job = -1,
-    ):
-        distributed_and_multiprocess=1,
-        return self.TM.lgb_model_cv(
-            X_train,
-            y_train,
-            X_test,
-            y_test,
-            categorical_features,
-            params,
-            folds,
-            seed,
-            distributed_and_multiprocess,
-            job,
+        logger.info(
+            f'*************** [hparams] cost time: {time.time()-start} ***************'
         )
+
+        return gbm, result

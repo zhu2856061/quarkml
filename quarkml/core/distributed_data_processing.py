@@ -24,8 +24,7 @@ warnings.filterwarnings(action='ignore', category=UserWarning)
 class DistDataProcessing(object):
 
     def __init__(self) -> None:
-        self.dp = None
-
+        pass
     def fit(
         self,
         files: List,

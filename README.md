@@ -13,6 +13,10 @@
        b. 模型超参
        c. 模型训练，提供树模型多进程训练，分布式训练，常规训练
        d. 模型解释性，自动化产生shap 模型解释图
+       e. 预估加速，对于常规进行joblib保存的模型进行编译，生成编译文件，然后利用load_model，predict进行预估
+    3. 分布式工程
+       a. 分布式训练lightgbm
+       b. 分布式数据处理
 
 ### 特征工程 FeatureEngineering 功能介绍
 
@@ -233,9 +237,9 @@ report_dir="encode",
 
 ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理后的新文件路径（处理后的数据文件）， 若传入DataFrame，则返回新的DataFrame
 label: str,  原始数据的label （必选项）
-cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+cat_features: list = None, 指定类别特征， （非必选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 part_column: str = None,  划分列，主要是用于PSI筛选特征的方法内，表明用这个一列进行划分数据集，然后比较每个数据两两之间的差异，当method为psi 时是必选项
-part_values: str = None,  划分列，与part_column 一起用，表明用这个一列按part_values list 内的值进行划分，然后比较每个数据两两之间的差异（非选项）， 若为空，将去part_column列中的所有值
+part_values: str = None,  划分列，与part_column 一起用，表明用这个一列按part_values list 内的值进行划分，然后比较每个数据两两之间的差异（非必选项）， 若为空，将去part_column列中的所有值
 bins=10,: IV计算中的分桶数
 importance_metric: str = 'importance',  tmodel_method方法得到的重要性分为3种方式的 ： importance， permutation， shap
 method: str = "booster", 特征筛选的方法：fwiz ， iv ， psi ， tmodel ， 注fwiz-基于SULOV（搜索不相关的变量列表）
@@ -282,10 +286,10 @@ hparams(
    spaces=None,
    report_dir="encode")
 
-ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+ds: str | pd.DataFrame, 原始数据 （必选项）, 可以是DataFrame 或者 文件路径
 label: str,  原始数据的label （必选项）
-valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
-cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+valid_ds: str | pd.DataFrame, 原始验证数据 （非必选项）, 可以是DataFrame 或者 文件路径
+cat_features: list = None, 指定类别特征， （非必选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
 spaces=None, 寻参的设置空间， 熟悉hyperopt应该知道怎么配置
 report_dir="encode"
@@ -305,6 +309,8 @@ best_params_hyperopt = ME.hparams(ds, 'class', cat_features=cat)
 
 ##### 2.2 API
 
+1. model_cv()
+
 ``` python
 
 model_cv(
@@ -317,10 +323,10 @@ model_cv(
    distributed_and_multiprocess=-1,
 )
 
-ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+ds: str | pd.DataFrame, 原始数据 （必选项）, 可以是DataFrame 或者 文件路径
 label: str,  原始数据的label （必选项）
-valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
-cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+valid_ds: str | pd.DataFrame, 原始验证数据 （非必选项）, 可以是DataFrame 或者 文件路径
+cat_features: list = None, 指定类别特征， （非必选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
 folds=5,交叉验证的数据划分份数，用于tmodel
 distributed_and_multiprocess=-1， 三种运行模式【常规 -1，多进程 2，分布式 1】
@@ -351,10 +357,10 @@ model(
    report_dir="encode",
 )
 
-ds: str | pd.DataFrame, 原始数据 （必选项）, 若传入文件路径，则返回处理DataFrame
+ds: str | pd.DataFrame, 原始数据 （必选项）, 可以是DataFrame 或者 文件路径
 label: str,  原始数据的label （必选项）
-valid_ds: str | pd.DataFrame, 原始验证数据 （必选项）, 若传入文件路径，则返回处理DataFrame
-cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+valid_ds: str | pd.DataFrame, 原始验证数据 （非必选项）, 可以是DataFrame 或者 文件路径
+cat_features: list = None, 指定类别特征， （非必选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
 params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
 report_dir="encode" lgb模型训练保存的路径report_dir下的 loan_model.pkl
 ```
@@ -402,58 +408,61 @@ ME.interpretable('regression', tm, X, single_index=1)
 ```
 
 ----
-# 【新增】分布式树模型训练，需对数据和模型进行改造
+# 【新增】分布式树模型(lightgbm)训练，需对数据和模型进行改造
 
-特征工程中的FeatureEngineering新增方法 dist_data_processing 分布式特征处理，并将数据转换成分布式数据样式，懒加载模式
+distributed_engineering()
 
-#### 分布式特征处理 dist_data_processing
-具备两种数据处理方式，第一种基于data_processing处理后的dataframe 数据进行直接转换
-第二种基于ray.data 读取文本文件，直接分布式对象
-```
-files = None, 文件的路径，可以是多个文件list 也可是单个文件str， 注：必须是csv格式的数据
-label_name: str = None,  数据的label列名
-delimiter: str = ',',    数据切分符
-cat_feature: list = [], 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
-num_feature: list = [], 指定连续特征， （非选项）， 若为空，则会利用原始数据的number类型 设置 为num
-ordinal_number=100, 指定数值特征若唯一值总数小于ordinal_number，则会划分成类别特征， （非选项）， 若为空，默认 100
-report_dir="./encode", 保留类别特征，连续特征 到路径下data_processing.pkl
-ds: pd.DataFrame = None, 若设置该值也就是数据是来自data_processing处理后的dataframe, 则上述所有设置不起效， 采用第一种方式产生数据
-```
+1. dist_model() 对于处理后的数据csv，进行分布式训练，（数据内的数据务必自己提前处理好，即数据类型为 int float 不能有字符str）
+2. dist_data_processing() 分布式特征处理，并将数据转换成分布式数据样式，懒加载模式
+3. 这里推荐先采用spark将数据处理成可训练数据，或者采用上述提供的方法，即将原始数据处理成可训练的格式后，即可调用dist_model()进行训练
 
-使用样例
-``` python
-# 第一种方法，直接转换后dataframe 再转换成ray.data
-ds = pd.read_csv("../experiment/credit/credit.csv")
-ds, cat, con = FE.data_processing(ds, 'class', is_fillna=True, verbosity=False)
-ds = FE.dist_data_processing(ds=ds)
+## 分布式训练 dist_model
 
-# 第一种方法，直接转换成ray.data
-ds, categorical_features, numerical_features = FE.dist_data_processing("experiment/credit/credit.csv", 'class')
+```python
+dist_model(
+   ds: ray.data.Dataset | str,
+   label: str,
+   valid_ds: ray.data.Dataset | str = None,
+   cat_features=None,
+   params=None,
+   num_workers=2,
+   trainer_resources=None,
+   resources_per_worker=None,
+   use_gpu=False,
+   delimiter=",",
+   report_dir='./encode/dist_model',
+)
 
-```
-
-#### 分布式训练 dist_model
-模型工程中的ModelEngineering新增方法 dist_model 分布式训练
-```
-trn_ds, 训练数据 ray.data
-label_name, 数据的label名
-val_ds=None, 验证数据 ray.data
-categorical_features = None, 类别特征列表
-params=None, 模型参数，不设置会有模型的
-seed=2023, 
-num_workers=2, ray 工作空间，会对数据进行切分，数据分发
-trainer_resources={"CPU": 4},  训练资源，会设置所有机器中使用多少个核用于纯训练计算
-resources_per_worker={"CPU": 2}, 数据读取资源，会设置所有的工作空间使用多少核用于数据读取
-use_gpu=False, 是否使用gpu, lgb 需要 param中设置使用gpu
-report_dir = './encode/dist_model', 模型保存位置
+ds: ray.data.Dataset | str, 原始数据 （必选项）, 可以是ray.data.Dataset 或者 文件路径
+label: str,  原始数据的label （必选项）
+valid_ds: str | pd.DataFrame, 原始验证数据 （非选项）, 可以是ray.data.Dataset 或者 文件路径
+cat_features: list = None, 指定类别特征， （非选项）， 若为空，则会利用原始数据的非number类型 设置 为cat
+params=None, lgb模型的参数，非必选项，若没有，会采用系统默认的
+num_workers=2, 数据并发，有几个work进行分布计算
+trainer_resources, 用于训练的资源配置 {"CPU": 2, "GPU": 2} cpu和gpu资源
+resources_per_worker, 用于work的资源 {"CPU": 2, "GPU": 2} cpu和gpu资源
+use_gpu=False， 是否使用gpu
+delimiter="," 数据csv中的分隔符
+report_dir 模型存储的位置
 ```
 
 使用样例
 
 ``` python
-ds, categorical_features, numerical_features = FE.dist_data_processing("experiment/credit/credit.csv", 'class')
+DE.dist_model("experiment/credit/credit.csv_data_processing.csv", 'class')
+ray.shutdown()
+```
 
-ME.dist_model(ds, 'class', categorical_features=categorical_features)
+# 【新增】预估效率优化
+
+predict_2_so(model_path) 将原始的joblib保存的文件编译成so，同目录下会生成so文件
+predict_load_so(model_path) 加载模型
+predict_x(x) 利用加载的模型进行预估
+
+``` python
+predict_2_so("encode/loan_model.pkl")
+predict_load_so("encode/loan_model.pkl_lite")
+predict_x(X)
 ```
 
 ---
@@ -463,6 +472,7 @@ ME.dist_model(ds, 'class', categorical_features=categorical_features)
 ```
 1 安装 
   pip3 install ray[default]
+  pip3 install quarkml-0.0.1-py3-none-any.whl (请将整个代码进行打包成whl,进行安装，打包方式quark-ml目录下 执行 python setup.py bdist_wheel)
   切记不可 pip3 install ray，因为这样安装不完整，会没有Dashboard
 2.启动
   【启动 head 节点】ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
