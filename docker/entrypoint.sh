@@ -7,8 +7,8 @@ ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 -
 # ray start --address='10.13.26.25:1063' # 10.13.26.25 是主节点
 
 # jupyter
-jupyter lab --NotebookApp.notebook_dir='/home/quarkml' --allow-root  --ip=0.0.0.0 --no-browser --NotebookApp.token='' --NotebookApp.password=''  --port=8888 &
+jupyter lab --NotebookApp.notebook_dir='/home/quarkml' --allow-root  --ip=0.0.0.0 --no-browser --NotebookApp.token='' --NotebookApp.password=''  --port=8888
 
 # fkask
-python /home/server.py 
+# python /home/server.py 
 

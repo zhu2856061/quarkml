@@ -184,7 +184,7 @@ class ModelEngineering(object):
             self.FI.many_prediction(muli_num, task)
 
         if is_importance:
-            self.FI.feature_dependence(task)
+            self.FI.sumary_prediction()
 
     def predict_2_so(self, model_path):
         # 目前只能是lightgbm

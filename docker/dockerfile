@@ -9,7 +9,7 @@ RUN echo 'Asia/Shanghai' >/etc/timezone
 WORKDIR /home/quarkml
 COPY quarkml-0.0.1-py3-none-any.whl /home/quarkml/
 COPY entrypoint.sh /home/
-COPY server.py /home/
+# COPY server.py /home/
 # jupyterlab 是交互使用端， flask 是服务请求端， quarkml 是执行引擎
 RUN pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
     pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
@@ -21,3 +21,6 @@ RUN pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
 RUN rm -rf quarkml-0.0.1-py3-none-any.whl
 
 ENTRYPOINT ["/home/entrypoint.sh"]
+
+# docker build -f Dockerfile -t mlmodel.oa.fenqile.com/mlserver/quarkml-jupyter-py37:0.0.1 .
+# docker push mlmodel.oa.fenqile.com/mlserver/quarkml-jupyter-py37:0.0.1

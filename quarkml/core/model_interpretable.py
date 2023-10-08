@@ -35,6 +35,7 @@ class ModelInterpretable(object):
             #     self.X.iloc[index, :],
             #     matplotlib=True,
             # )
+            
             shap.plots.force(self.shap_values[index], matplotlib=True)
         else:
             for i, _ in enumerate(self.shap_values):
@@ -55,7 +56,7 @@ class ModelInterpretable(object):
             #     self.X.iloc[:num, :],
             #     matplotlib=True,
             # )
-            shap.plots.force(self.shap_values)
+            shap.plots.force(self.shap_values[:num])
         else:
             for i, _ in enumerate(self.shap_values):
                 logger.info(f"============= {i} =============")
@@ -65,7 +66,7 @@ class ModelInterpretable(object):
                 #     self.X.iloc[:num, :],
                 #     matplotlib=True,
                 # )
-                shap.plots.force(self.shap_values)
+                shap.plots.force(self.shap_values[:num])
 
     def single_waterfall(self, index=0, task='regression'):
         # explainer = shap.Explainer(self.model)
@@ -77,15 +78,15 @@ class ModelInterpretable(object):
                 logger.info(f"============= {i} =============")
                 shap.plots.waterfall(self.shap_values[i][index])
 
-    def many_waterfall(self, task='regression'):
+    def many_waterfall(self, num=100, task='regression'):
         # explainer = shap.Explainer(self.model)
         # shap_values = explainer(self.X)
         if task == 'regression':
-            shap.plots.beeswarm(self.shap_values)
+            shap.plots.beeswarm(self.shap_values[:num])
         else:
             for i, _ in enumerate(self.shap_values):
                 logger.info(f"============= {i} =============")
-                shap.plots.beeswarm(self.shap_values[i])
+                shap.plots.beeswarm(self.shap_values[i][:num])
 
     def sumary_prediction(self):
         shap.plots.bar(self.shap_values)

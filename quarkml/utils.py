@@ -305,7 +305,8 @@ def transform(data: pd.DataFrame,
     for i, res in enumerate(results):
         is_cat, d1, f = res.result()
         names.append(new_features[i])
-        _data[new_features[i]] = d1
+        # _data[new_features[i]] = d1
+        _data['autoFE_f_%d' % i + ""] = d1
         if is_cat: cat_feats.append(new_features[i])
     _data = pd.DataFrame(_data)
     for c in _data.columns:

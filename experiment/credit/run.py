@@ -46,7 +46,7 @@ DE = DistributedEngineering()
 #########
 
 ######### 特征衍生 #########
-# ds = FE.feature_generation("credit.csv", 'class', is_filter=True)
+# file_path = FE.feature_generation("credit.csv", 'class', is_filter=True)
 # ds = FE.feature_generation(ds, 'class', cat, is_filter=True)
 #########
 
@@ -63,11 +63,12 @@ DE = DistributedEngineering()
 # #########
 
 # ######### 训练 #########
-# ME.model(ds, 'class')
+# cls = ME.model(ds, 'class')
 # #########
 
 # ######### 可解释性 #########
-# ME.interpretable('regression', tm, X, single_index=1)
+# x = ds.drop('class', axis=1)
+# ME.interpretable('regression', cls[0], X, single_index=1)
 # #########
 
 # # ******************************************************************************

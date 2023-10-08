@@ -94,9 +94,7 @@ def lgb_train(
     else:
         params_set.update({'objective': 'multiclass'})
         params_set.update({'metric': 'auc_mu'})
-    if cat_features is not None:
-        params_set.update(
-            {"categorical_feature": 'name:' + ','.join(cat_features)})
+    
     if params is not None:
         params_set.update(params)
 
