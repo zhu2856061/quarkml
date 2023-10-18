@@ -1,5 +1,5 @@
 # 基础镜像 python 3.7
-FROM python:3.7
+FROM continuumio/miniconda3:4.12.0
 LABEL maintainer="merlinzhu@lexin.com" version="0.0.1"
 
 # 设置时区
@@ -20,7 +20,10 @@ RUN pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
 
 RUN rm -rf quarkml-0.0.1-py3-none-any.whl
 
+ENV NB_PREFIX /
+
 ENTRYPOINT ["/home/entrypoint.sh"]
 
-# docker build -f Dockerfile -t mlmodel.oa.fenqile.com/mlserver/quarkml-jupyter-py37:0.0.1 .
-# docker push mlmodel.oa.fenqile.com/mlserver/quarkml-jupyter-py37:0.0.1
+# docker build -f Dockerfile -t mlmodel.oa.fenqile.com/mlserver/automl:quarkml-jupyter-py37 .
+# docker push mlmodel.oa.fenqile.com/mlserver/automl:quarkml-jupyter-py37
+# docker run -p 8888:8888 b7f7291c0f25

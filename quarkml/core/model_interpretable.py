@@ -23,6 +23,7 @@ class ModelInterpretable(object):
         self.X = X
         self.explainer = shap.Explainer(self.model)
         self.shap_values = self.explainer(self.X)
+        return self.shap_values
         # self.explainer = shap.TreeExplainer(model)
         # self.shap_values = self.explainer.shap_values(X)
 

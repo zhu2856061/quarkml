@@ -12,7 +12,6 @@ REQUIRED_PACKAGES = [
     'pandas-profiling==3.6.6',
     'lightgbm==4.0.0',
     'scikit-learn==1.0.2',
-    # 'xgboost==1.6.2',
     'cython==3.0.0',
     'joblib==1.3.1',
     'loguru>=0.7.0',
