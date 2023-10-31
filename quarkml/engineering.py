@@ -184,25 +184,14 @@ class Engine(object):
         if isinstance(ds, str):
             ds = pd.read_csv(ds)
 
-        # step0: 划分X y
-        X_train = ds.drop(label, axis=1)
-        y_train = ds[[label]]
-
         if valid_ds is not None:
             if isinstance(valid_ds, str):
                 valid_ds = pd.read_csv(valid_ds)
 
-            X_test = valid_ds.drop(label, axis=1)
-            y_test = valid_ds[[label]]
-        else:
-            X_test = None
-            y_test = None
-
         best_params = self.TM.lgb_hparams(
-            trn_x=X_train,
-            trn_y=y_train,
-            val_x=X_test,
-            val_y=y_test,
+            ds,
+            label,
+            valid_ds,
             cat_features=cat_features,
             params=params,
             spaces=spaces,
@@ -231,25 +220,14 @@ class Engine(object):
         if isinstance(ds, str):
             ds = pd.read_csv(ds)
 
-        # step0: 划分X y
-        X_train = ds.drop(label, axis=1)
-        y_train = ds[[label]]
-
         if valid_ds is not None:
             if isinstance(valid_ds, str):
                 valid_ds = pd.read_csv(valid_ds)
 
-            X_test = valid_ds.drop(label, axis=1)
-            y_test = valid_ds[[label]]
-        else:
-            X_test = None
-            y_test = None
-
-        gbm, report_dict = self.TM.lgb_model(
-            X_train,
-            y_train,
-            X_test,
-            y_test,
+        gbm, report_dict = self.TM.lgb_train(
+            ds,
+            label,
+            valid_ds,
             cat_features,
             params,
         )
@@ -271,3 +249,34 @@ class Engine(object):
         shap_values = explainer(X)
         return shap_values
 
+    def model_balanced_train(
+        self,
+        ds: pd.DataFrame,
+        label: str,
+        valid_ds: pd.DataFrame = None,
+        cat_features=None,
+        params=None,
+        report_dir="encode",
+    ):
+        start = time.time()
+        if isinstance(ds, str):
+            ds = pd.read_csv(ds)
+
+        if valid_ds is not None:
+            if isinstance(valid_ds, str):
+                valid_ds = pd.read_csv(valid_ds)
+
+        gbm, report_dict = self.TM.lgb_balanced_train(
+            ds,
+            label,
+            valid_ds,
+            cat_features,
+            params,
+        )
+        print(report_dict)
+        joblib.dump(gbm, report_dir + '/loan_model.pkl')
+
+        logger.info(
+            f'*************** [hparams] cost time: {time.time()-start} ***************'
+        )
+        return gbm

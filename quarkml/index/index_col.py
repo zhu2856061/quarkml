@@ -38,7 +38,7 @@ class FeatureIndex(object):
         X = ds.drop(label, axis=1)
         y = ds[[label]]
         """ 基于IV值 大于 0.02 为有效特征进行选择 """
-        selected_fea, X, woe, iv = self.IVObj.fit(
+        woe, iv = self.IVObj.fit(
             X=X,
             y=y,
             part_column=part_column,
@@ -75,7 +75,7 @@ class FeatureIndex(object):
         # step0: 划分X y
         X = ds.drop(label, axis=1)
 
-        selected_fea, X, psi_detail, psi = self.PSIObj.fit(
+        psi_detail, psi = self.PSIObj.fit(
             X=X,
             part_column=part_column,
             cat_features=cat_features,

@@ -8,11 +8,13 @@ from __future__ import absolute_import, division, print_function
 from loguru import logger
 from quarkml.model.tree_model import lgb_train
 from quarkml.model.distributed_tree_model import lgb_distributed_train
+from quarkml.model.balanced_mode import balance_mode
 from hyperopt import fmin, hp, Trials, space_eval, tpe
 import warnings
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
+
 warnings.filterwarnings('ignore')
 
 
@@ -26,47 +28,58 @@ class TreeModel(object):
         y_scores = np.array(y_scores)
         return roc_auc_score(y_true, y_scores)
 
-    def lgb_model(
+    def lgb_train(
         self,
-        x_train,
-        y_train,
-        X_test=None,
-        y_test=None,
+        tr_ds,
+        label,
+        vl_ds=None,
         cat_features=None,
         params=None,
     ):
-
-        return lgb_train(
-            trn_x=x_train,
-            trn_y=y_train,
-            val_x=X_test,
-            val_y=y_test,
-            cat_features=cat_features,
-            params=params,
-        )
-
-    def lgb_hparams(self,
-        trn_x,
-        trn_y,
-        val_x=None,
-        val_y=None,
-        cat_features=None,
-        params=None,
-        spaces=None,
-    ):
-        if val_x is None:
-            trn_x, val_x, trn_y, val_y = train_test_split(
-                trn_x,
-                trn_y,
+        if vl_ds is None:
+            tr_ds, vl_ds = train_test_split(
+                tr_ds,
                 test_size=0.3,
                 random_state=2023,
             )
 
-        self.params = params
-        self.trn_x = trn_x
-        self.val_x = val_x
-        self.trn_y = trn_y
-        self.val_y = val_y
+        tr_X = tr_ds.drop(label, axis=1)
+        tr_y = tr_ds[[label]]
+
+        vl_X = vl_ds.drop(label, axis=1)
+        vl_y = vl_ds[[label]]
+
+        return lgb_train(
+            trn_x=tr_X,
+            trn_y=tr_y,
+            val_x=vl_X,
+            val_y=vl_y,
+            cat_features=cat_features,
+            params=params,
+        )
+
+    def lgb_hparams(
+        self,
+        tr_ds,
+        label,
+        vl_ds=None,
+        cat_features=None,
+        params=None,
+        spaces=None,
+    ):
+        if vl_ds is None:
+            tr_ds, vl_ds = train_test_split(
+                tr_ds,
+                test_size=0.3,
+                random_state=2023,
+            )
+
+        self.tr_X = tr_ds.drop(label, axis=1)
+        self.tr_y = tr_ds[[label]]
+
+        self.vl_X = vl_ds.drop(label, axis=1)
+        self.vl_y = vl_ds[[label]]
+
         self.cat_features = cat_features
 
         if spaces is None:
@@ -75,11 +88,11 @@ class TreeModel(object):
                 "max_bin": hp.choice("max_bin", range(50, 500)),
                 "learning_rate": hp.uniform("learning_rate", 0.001, 0.2),
                 "boosting_type": hp.choice("boosting_type",
-                                        ['gbdt', 'dart', 'rf']),
+                                           ['gbdt', 'dart', 'rf']),
                 "num_leaves": hp.choice("num_leaves", range(8, 64)),
                 "max_depth": hp.choice("max_depth", range(3, 8)),
                 "min_data_in_leaf": hp.choice("min_data_in_leaf",
-                                            range(5, 100)),
+                                              range(5, 100)),
                 "lambda_l1": hp.uniform("lambda_l1", 0, 100),
                 "lambda_l2": hp.uniform("lambda_l2", 0, 100),
                 "bagging_fraction": hp.uniform("bagging_fraction", 0.5, 1.0),
@@ -101,24 +114,24 @@ class TreeModel(object):
     def _hyperopt_target_fn(self, config):
 
         futures = lgb_train(
-            trn_x=self.trn_x,
-            trn_y=self.trn_y,
-            val_x=self.val_x,
-            val_y=self.val_y,
+            trn_x=self.tr_X,
+            trn_y=self.tr_y,
+            val_x=self.vl_X,
+            val_y=self.vl_y,
             cat_features=self.cat_features,
             params=config,
         )
 
         val_pred = futures[0].predict(
-            self.val_x,
+            self.vl_X,
             num_iteration=futures[0]._best_iteration,
         )
 
         val_pred = futures[0].predict(
-            self.val_x,
+            self.vl_X,
             num_iteration=futures[0]._best_iteration,
         )
-        val_score = self.auc(self.val_y, val_pred)
+        val_score = self.auc(self.vl_y, val_pred)
 
         return -val_score
 
@@ -147,4 +160,41 @@ class TreeModel(object):
             resources_per_worker,
             use_gpu,
             report_dir,
+        )
+
+    def lgb_balanced_train(
+        x_train,
+        tr_ds,
+        label,
+        vl_ds=None,
+        cat_features=None,
+        params=None,
+    ):
+
+        tr_ds, need_name = balance_mode(tr_ds, label, cat_features=None)
+
+        if vl_ds is None:
+            tr_ds, vl_ds = train_test_split(
+                tr_ds,
+                test_size=0.3,
+                random_state=2023,
+            )
+        else:
+            vl_ds = vl_ds.drop('sample_type', axis=1)
+            # 新数据
+            vl_ds = vl_ds[need_name]
+
+        tr_X = tr_ds.drop(label, axis=1)
+        tr_y = tr_ds[[label]]
+
+        vl_X = vl_ds.drop(label, axis=1)
+        vl_y = vl_ds[[label]]
+
+        return lgb_train(
+            trn_x=tr_X,
+            trn_y=tr_y,
+            val_x=vl_X,
+            val_y=vl_y,
+            cat_features=cat_features,
+            params=params,
         )

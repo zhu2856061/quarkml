@@ -233,8 +233,7 @@ class WOEIV(object):
             for col, section_v in iv.items():
                 iv[col] = min(list(section_v.values()))
 
-        selected_fea = [k for k, v in iv.items() if v > 0.02]
-        return selected_fea, X[selected_fea], woe, iv
+        return woe, iv
 
 
 def _binning_numerical_section(

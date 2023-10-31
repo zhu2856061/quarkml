@@ -54,12 +54,18 @@ ds, cat, con = engine.feature_processing(ds, 'class')
 # #########
 
 # ######### 训练 #########
-cls = engine.model_train(ds, 'class', params=best_params_hyperopt)
+cls = engine.model_train(ds, 'class', cat_features=cat)
+# #########
+
+# ######### 平衡式训练 #########
+import random
+ds['sample_type'] = [random.randint(0,1) for _ in range(len(ds))]
+cls = engine.model_balanced_train(ds, 'class', cat_features=cat)
 # #########
 
 # ######### 可解释性 #########
-x = ds.drop('class', axis=1)
-shap_values = engine.interpretable(cls, x)
+# x = ds.drop('class', axis=1)
+# shap_values = engine.interpretable(cls, x)
 # #########
 
 # # ******************************************************************************

@@ -172,7 +172,7 @@ class PSI(object):
             psi = psi[psi[col] < 0.25]
 
         selected_fea = list(psi['psi_var'])
-        return selected_fea, X[selected_fea], psi_detail, psi
+        return psi_detail, psi
 
 
 def _distribution_categorical_section(X: pd.DataFrame,
