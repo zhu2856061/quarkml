@@ -8,7 +8,7 @@ RUN echo 'Asia/Shanghai' >/etc/timezone
 
 WORKDIR /home/quarkml
 COPY quarkml-0.0.1-py3-none-any.whl /home/quarkml/
-COPY entrypoint.sh /home/
+# COPY entrypoint.sh /home/
 # COPY server.py /home/
 # jupyterlab 是交互使用端， flask 是服务请求端， quarkml 是执行引擎
 RUN pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
@@ -22,8 +22,8 @@ RUN rm -rf quarkml-0.0.1-py3-none-any.whl
 
 ENV NB_PREFIX /
 
-ENTRYPOINT ["/home/entrypoint.sh"]
-
+# ENTRYPOINT ["/home/entrypoint.sh"]
+CMD ["sh", "-c", "ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265 --disable-usage-stats && jupyter lab --NotebookApp.notebook_dir='/home/autodl_jupyter' --allow-root --NotebookApp.base_url=${NB_PREFIX} --ip=0.0.0.0 --no-browser --NotebookApp.token='' --NotebookApp.password='' --port=8888"]
 # docker build -f Dockerfile -t mlmodel.oa.fenqile.com/mlserver/automl:quarkml-jupyter-py37 .
 # docker push mlmodel.oa.fenqile.com/mlserver/automl:quarkml-jupyter-py37
 # docker run -p 8888:8888 b7f7291c0f25

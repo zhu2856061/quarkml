@@ -13,8 +13,7 @@ from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
 import time
 import shap
-import joblib
-from sklearn.metrics import roc_auc_score, roc_curve
+
 from typing import List
 import warnings
 
@@ -30,7 +29,7 @@ def lgb_train(
     params=None,
     trn_init_score: pd.DataFrame = None,
     val_init_score: pd.DataFrame = None,
-    importance_metric: str = "importance",
+    report_dir: str = 'encode',
     seed=2023,
 ):
 
@@ -88,13 +87,9 @@ def lgb_train(
         'stopping_rounds': 200,
     }
     _label_unique_num = trn_y[trn_y.columns[0]].nunique()
-    if _label_unique_num <= 2:
-        params_set.update({'objective': 'regression'})
-        params_set.update({'metric': 'auc'})
-    else:
-        params_set.update({'objective': 'multiclass'})
-        params_set.update({'metric': 'auc_mu'})
-    
+    if _label_unique_num != 2:
+        raise ValueError(f"label value is not 0 or 1")
+
     if params is not None:
         params_set.update(params)
 
@@ -102,12 +97,7 @@ def lgb_train(
         f"************************************ model parameters : {params_set} ************************************"
     )
 
-    if "class" in params_set['objective'] or "binary" == params_set[
-            'objective']:
-        gbm = lgb.LGBMClassifier(**params_set)
-    else:
-        gbm = lgb.LGBMRegressor(**params_set)
-
+    gbm = lgb.LGBMRegressor(**params_set)
     callbacks = [
         lgb.log_evaluation(period=params_set['period']),
         lgb.early_stopping(stopping_rounds=params_set['stopping_rounds'])
@@ -126,28 +116,26 @@ def lgb_train(
     for k, v in zip(trn_x.columns, gbm.feature_importances_):
         featrue_importance[k] = v
 
-    if importance_metric == "all" or importance_metric == "permutation":
-        # model permutation
-        r = permutation_importance(
-            gbm,
-            val_x,
-            val_y,
-            n_repeats=5,
-            random_state=seed,
-        )
-        for k, v in zip(trn_x.columns, r.importances_mean):
-            featrue_permutation[k] = v
+    # model permutation
+    r = permutation_importance(
+        gbm,
+        val_x,
+        val_y,
+        n_repeats=5,
+        random_state=seed,
+    )
+    for k, v in zip(trn_x.columns, r.importances_mean):
+        featrue_permutation[k] = v
 
-    if importance_metric == "all" or importance_metric == "shap":
-        # model shap
-        explainer = shap.TreeExplainer(gbm)
-        shap_values = explainer.shap_values(trn_x)
-        shap_values = np.abs(np.sum(shap_values, axis=1))
-        for k, v in zip(trn_x.columns, shap_values):
-            try:
-                featrue_shap[k].append(v)
-            except KeyError:
-                featrue_shap[k] = [v]
+    # model shap
+    explainer = shap.TreeExplainer(gbm)
+    shap_values = explainer.shap_values(trn_x)
+    shap_values = np.abs(np.sum(shap_values, axis=1))
+    for k, v in zip(trn_x.columns, shap_values):
+        try:
+            featrue_shap[k].append(v)
+        except KeyError:
+            featrue_shap[k] = [v]
 
     report_dict = {
         'featrue_importance': featrue_importance,
@@ -159,35 +147,4 @@ def lgb_train(
         f'************************************ end lgb total time: {time.time()-start} ************************************'
     )
 
-    return gbm, report_dict, params_set
-
-
-def lgb_save(model, report_dir):
-    joblib.dump(model, report_dir + '/loan_model.pkl')
-
-
-def _auc(y_true, y_scores):
-    y_true = np.array(y_true)
-    y_scores = np.array(y_scores)
-    return roc_auc_score(y_true, y_scores)
-
-
-def _ks(y_true, y_scores):
-    y_true = np.array(y_true)
-    y_scores = np.array(y_scores)
-    FPR, TPR, thresholds = roc_curve(y_true, y_scores)
-    return abs(FPR - TPR).max()
-
-
-def _get_categorical_numerical_features(ds: pd.DataFrame):
-    # 获取类别特征，除number类型外的都是类别特征
-    categorical_features = list(ds.select_dtypes(exclude=np.number))
-    numerical_features = []
-    for feature in ds.columns:
-        if feature in categorical_features:
-            continue
-        else:
-            numerical_features.append(feature)
-    categorical_features = [str(_) for _ in categorical_features]
-    numerical_features = [str(_) for _ in numerical_features]
-    return categorical_features, numerical_features
+    return gbm, report_dict

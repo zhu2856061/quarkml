@@ -10,9 +10,8 @@ sys.path.append("../..")
 
 import ray
 import pandas as pd
-from quarkml.feature_engineering import FeatureEngineering
-from quarkml.model_engineering import ModelEngineering
-from quarkml.distributed_engineering import DistributedEngineering
+from quarkml.engineering import Engine
+
 
 ######### 启动ray 构建一个单机环境 , 单机自己测试就启动这个后再运行程序，若分布式多机，则分布式环境已经有了，无需启动
 # ray start --head --port=1063 --include-dashboard=true --dashboard-host=0.0.0.0 --dashboard-port=8265
@@ -31,44 +30,36 @@ context = ray.init(
 )
 print(context.dashboard_url)
 #########
-FE = FeatureEngineering()
-ME = ModelEngineering()
-DE = DistributedEngineering()
+engine = Engine()
 ######### 数据处理 #########
-# file_path = FE.data_processing_fit("credit.csv", 'class')
-# ds = pd.read_csv("credit.csv")
-# ds, cat, con = FE.data_processing_fit(ds, 'class')
-# print(ds)
-# # step1.1 基于新数据采用同样的处理方法
-# ds = pd.read_csv("credit.csv")
-# ds, cat, con = FE.data_processing_transform(ds, 'class')
+# file_path = engine.feature_processing("credit.csv", 'class')
+ds = pd.read_csv("credit.csv")
+ds, cat, con = engine.feature_processing(ds, 'class')
 # print(ds)
 #########
 
 ######### 特征衍生 #########
-# file_path = FE.feature_generation("credit.csv", 'class', is_filter=True)
-# ds = FE.feature_generation(ds, 'class', cat, is_filter=True)
+# file_path = engine.feature_generation("credit.csv", 'class', is_filter=True)
+# ds = engine.feature_generation(ds, 'class', cat, is_filter=True)
 #########
 
-# ######### 特征选择 #########
-# ds = FE.feature_selector(ds, 'class', part_column='age', cate_features=cat,  method='tmodel')
+# ######### 特征信息 #########
+# value = engine.feature_index(ds, 'class', part_column='age', cate_features=cat,  method='psi')
+# value = engine.feature_index(ds, 'class', part_column='age', cate_features=cat,  method='iv')
+# print(value)
 # #########
 
 # ######### 自动超参 #########
-# best_params_hyperopt = ME.hparams(ds, 'class', cat_features=cat)
-# #########
-
-# ######### 交叉验证 #########
-# ME.model_cv(ds, 'class')
+# best_params_hyperopt = engine.model_hparams(ds, 'class', cat_features=cat)
 # #########
 
 # ######### 训练 #########
-# cls = ME.model(ds, 'class')
+cls = engine.model_train(ds, 'class', params=best_params_hyperopt)
 # #########
 
 # ######### 可解释性 #########
-# x = ds.drop('class', axis=1)
-# ME.interpretable('regression', cls[0], X, single_index=1)
+x = ds.drop('class', axis=1)
+shap_values = engine.interpretable(cls, x)
 # #########
 
 # # ******************************************************************************
@@ -80,6 +71,6 @@ DE = DistributedEngineering()
 #     "experiment/credit/credit.csv", 'class')
 
 # ######### 训练 #########
-FE.data_processing_fit("credit.csv", 'class')
-DE.dist_model("experiment/credit/credit.csv_data_processing.csv", 'class')
+# FE.data_processing_fit("credit.csv", 'class')
+# DE.dist_model("experiment/credit/credit.csv_data_processing.csv", 'class')
 ray.shutdown()

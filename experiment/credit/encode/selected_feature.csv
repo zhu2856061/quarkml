@@ -1,0 +1,8 @@
+selected_feature
+"GroupByThenMean(employment,credit_history)"
+"CombineThenFreq(credit_real,residence_since)"
+"GroupByThenRank(purpose,age)"
+(other_parties+purpose)
+(other_parties-purpose)
+"GroupByThenMax(housing,credit_real)"
+"GroupByThenStd(property_magnitude,existing_credits)"

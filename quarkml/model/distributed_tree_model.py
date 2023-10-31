@@ -63,13 +63,8 @@ def lgb_distributed_train(
     }
 
     _label_unique_num = trn_ds.unique(label)
-    if len(_label_unique_num) <= 2:
-        params_set.update({'objective': 'regression'})
-        params_set.update({'metric': 'auc'})
-    else:
-        params_set.update({'objective': 'multiclass'})
-        params_set.update({'num_class': len(_label_unique_num)})
-        params_set.update({'metric': 'auc_mu'})
+    if len(_label_unique_num) != 2:
+        raise ValueError(f"label value is not 0 or 1")
 
     if params is not None:
         params_set.update(params)
